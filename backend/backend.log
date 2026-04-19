@@ -1,0 +1,23 @@
+
+> prescopad-backend@2.0.0 dev
+> ts-node src/server.ts
+
+(node:42812) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at Server.listen (node:net:2170:7)
+    at app.listen (D:\Pratik Projects\Prescopad\backend\node_modules\express\lib\application.js:635:24)
+    at Object.<anonymous> (D:\Pratik Projects\Prescopad\backend\src\server.ts:56:5)
+    at Module._compile (node:internal/modules/cjs/loader:1809:14)
+    at Module.m._compile (D:\Pratik Projects\Prescopad\backend\node_modules\ts-node\src\index.ts:1618:23)
+    at node:internal/modules/cjs/loader:1940:10
+    at Object.require.extensions.<computed> [as .ts] (D:\Pratik Projects\Prescopad\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1530:32) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}

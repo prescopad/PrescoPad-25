@@ -1,0 +1,161 @@
+If you’re using **Expo**, APK builds are **way simpler than React Native CLI** — but only if you do it the modern way. The old `expo build:android` method is basically obsolete. Use **EAS Build** now.
+
+Here’s the straight process:
+
+---
+
+## ✅ 1. Install EAS CLI (mandatory now)
+
+```bash
+npm install -g eas-cli
+```
+
+Then login:
+
+```bash
+eas login
+```
+
+If you don’t have an Expo account → create one first.
+
+---
+
+## ✅ 2. Initialize EAS in your project
+
+Inside your Expo project:
+
+```bash
+eas build:configure
+```
+
+This generates:
+
+```
+eas.json
+```
+
+Don’t delete it — build config lives there.
+
+---
+
+## ✅ 3. Build APK (not AAB)
+
+By default Expo builds **AAB** (Play Store format).
+If you want **APK install file**, run:
+
+```bash
+eas build -p android --profile preview
+```
+
+OR explicitly:
+
+```bash
+eas build -p android --profile apk
+```
+
+If `apk` profile missing, add this to `eas.json`:
+
+```json
+{
+  "build": {
+    "apk": {
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
+```
+
+---
+
+## ✅ 4. Wait for cloud build
+
+Expo builds on their servers.
+
+You’ll get:
+
+* Download link
+* QR code
+* Build logs
+
+No Android Studio needed.
+
+---
+
+## ⚠️ Reality Check (Common Mistakes)
+
+### ❌ Using Expo Go + native libraries
+
+Won’t build properly unless:
+
+```
+npx expo prebuild
+```
+
+or eject.
+
+---
+
+### ❌ Missing app config
+
+Make sure in `app.json` or `app.config.js`:
+
+```json
+{
+  "expo": {
+    "android": {
+      "package": "com.yourapp.name"
+    }
+  }
+}
+```
+
+Without package name → build fails.
+
+---
+
+### ❌ Expecting instant build
+
+Cloud builds can take:
+
+* 5–20 minutes free tier
+* Longer if queue heavy
+
+That’s normal.
+
+---
+
+## 💡 Quick sanity checklist
+
+Before building:
+
+```
+npx expo doctor
+npm install
+```
+
+Fix warnings first.
+
+---
+
+## Bottom line
+
+If Expo app:
+
+👉 `eas build:configure`
+👉 `eas build -p android --profile apk`
+
+That’s it.
+
+---
+
+If you want, next I can explain:
+
+* APK vs AAB (important for Play Store)
+* Offline/local APK build
+* Common build errors you WILL hit
+* How to reduce APK size
+* Signing + Play Store deployment
+
+Just say.
