@@ -57,7 +57,7 @@ export const useClinicStore = create<ClinicStore>((set, get) => ({
             name: u.name || '',
             phone: u.phone || '',
             specialty: u.specialty || '',
-            regNumber: u.regNumber || '',
+            regNumber: u.reg_number || u.regNumber || '',
             signatureBase64: signatureBase64 || null,
             cloudId: u.id,
           },

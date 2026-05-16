@@ -1,4 +1,4 @@
-import { query } from '../db/db';
+import { query } from '../config/database';
 
 // Helper to parse date ranges
 function getDateRange(period: 'today' | 'week' | 'month'): { from: Date; to: Date } {
@@ -216,8 +216,8 @@ export async function getPopularItems(
   );
 
   return {
-    topMedicines: topMedicines.rows.map(m => ({ name: m.name, count: m.usage_count })),
-    topTests: topTests.rows.map(t => ({ name: t.name, count: t.usage_count })),
+    topMedicines: topMedicines.map((medicine) => ({ name: medicine.name, count: medicine.usage_count })),
+    topTests: topTests.map((test) => ({ name: test.name, count: test.usage_count })),
   };
 }
 

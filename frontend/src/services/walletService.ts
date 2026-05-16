@@ -11,7 +11,11 @@ export async function rechargeWallet(amount: number): Promise<{
   transactionId: string;
 }> {
   const response = await api.post('/wallet/recharge', { amount });
-  return response.data;
+  const wallet = response.data.wallet ?? {};
+  return {
+    balance: wallet.balance ?? response.data.balance ?? 0,
+    transactionId: response.data.transactionId ?? '',
+  };
 }
 
 export async function deductWallet(
@@ -24,7 +28,11 @@ export async function deductWallet(
     description,
     referenceId,
   });
-  return response.data;
+  const wallet = response.data.wallet ?? {};
+  return {
+    balance: wallet.balance ?? response.data.balance ?? 0,
+    transactionId: response.data.transactionId ?? '',
+  };
 }
 
 export async function fetchTransactions(
@@ -34,7 +42,7 @@ export async function fetchTransactions(
   const response = await api.get('/wallet/transactions', {
     params: { limit, offset },
   });
-  return response.data.transactions;
+  return response.data.transactions ?? [];
 }
 
 export async function updateAutoRefill(

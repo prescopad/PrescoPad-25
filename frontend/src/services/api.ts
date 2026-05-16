@@ -43,8 +43,13 @@ api.interceptors.response.use(
           { refreshToken }
         );
 
-        const { accessToken } = response.data;
+        // Python backend returns snake_case keys
+        const accessToken = response.data.access_token ?? response.data.accessToken;
+        const newRefreshToken = response.data.refresh_token ?? response.data.refreshToken;
         await SecureStore.setItemAsync('accessToken', accessToken);
+        if (newRefreshToken) {
+          await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+        }
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
 
         return api(originalRequest);
