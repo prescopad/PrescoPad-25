@@ -1,7 +1,10 @@
+import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+
+logging.basicConfig(level=logging.INFO)
 
 from app.config.database import connect_db, close_db
 from app.config.settings import settings
@@ -46,7 +49,15 @@ async def health():
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    exc_str = str(exc).lower()
+    logging.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    # MongoDB connection pool paused / network blip → return 503 so frontend retries
+    if "connection pool paused" in exc_str or "autoreconnect" in exc_str or "serverselectiontimeout" in exc_str:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "Database temporarily unavailable, please retry"},
+        )
     return JSONResponse(
         status_code=500,
-        content={"success": False, "message": "Internal server error"},
+        content={"success": False, "message": str(exc) or "Internal server error"},
     )

@@ -3,15 +3,21 @@ Medical Transcription Service
 Receives audio bytes → Groq Whisper transcription → LLaMA speaker diarization
 → LLaMA medical extraction → returns structured prescription data + transcript
 """
-import os
+import asyncio
 import json
+import logging
 import re
 from datetime import datetime, timezone
+from functools import partial
+
 from bson import ObjectId
 from groq import Groq
+
 from app.config.settings import settings
 from app.config.database import get_db
 from app.models.common import serialize_doc
+
+log = logging.getLogger(__name__)
 
 WHISPER_MODEL = "whisper-large-v3-turbo"
 LLAMA_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"
@@ -25,23 +31,23 @@ def _groq_client() -> Groq:
 
 # ── Step 1: Transcribe ────────────────────────────────────────────────────────
 
-def _transcribe(audio_bytes: bytes, filename: str) -> object:
+def _transcribe_sync(audio_bytes: bytes, filename: str):
     client = _groq_client()
-    result = client.audio.transcriptions.create(
+    return client.audio.transcriptions.create(
         file=(filename, audio_bytes),
         model=WHISPER_MODEL,
         temperature=0,
         response_format="verbose_json",
     )
-    return result
 
 
 # ── Step 2: Diarize speakers ──────────────────────────────────────────────────
 
-def _diarize(segments: list, client: Groq) -> list:
+def _diarize_sync(segments: list) -> list:
     if not segments:
         return []
 
+    client = _groq_client()
     numbered = "\n".join(
         f"[{i}] ({seg.start:.1f}s–{seg.end:.1f}s): {seg.text.strip()}"
         for i, seg in enumerate(segments)
@@ -75,6 +81,7 @@ Return ONLY a JSON array, no explanation, no markdown:"""
     try:
         labels = json.loads(raw)
     except json.JSONDecodeError:
+        log.warning("Diarization JSON parse failed, raw: %s", raw[:200])
         labels = [{"index": i, "speaker": "Unknown"} for i in range(len(segments))]
 
     label_map = {item["index"]: item["speaker"] for item in labels}
@@ -91,7 +98,11 @@ Return ONLY a JSON array, no explanation, no markdown:"""
 
 # ── Step 3: Extract medical info → prescription fields ───────────────────────
 
-def _extract_medical_info(diarized: list, client: Groq) -> dict:
+def _extract_medical_info_sync(diarized: list) -> dict:
+    if not diarized:
+        return {}
+
+    client = _groq_client()
     conversation = "\n".join(
         f"{seg['speaker']} ({seg['start']}s): {seg['text']}"
         for seg in diarized
@@ -145,6 +156,7 @@ Transcript:
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
+        log.warning("Medical extraction JSON parse failed, raw: %s", raw[:200])
         return {"error": "Could not parse extraction", "raw": raw}
 
 
@@ -157,20 +169,46 @@ async def process_audio(
     patient_id: str,
     clinic_id: str,
 ) -> dict:
-    client = _groq_client()
+    loop = asyncio.get_event_loop()
 
-    # 1. Transcribe
-    transcription = _transcribe(audio_bytes, filename)
-    segments = getattr(transcription, "segments", [])
-    full_text = getattr(transcription, "text", "")
+    # Run all blocking Groq SDK calls in a thread pool so they don't block the event loop
+    try:
+        log.info("Transcribing audio: %s bytes, file=%s", len(audio_bytes), filename)
+        transcription = await loop.run_in_executor(
+            None, partial(_transcribe_sync, audio_bytes, filename)
+        )
+    except Exception as e:
+        log.exception("Whisper transcription failed")
+        raise ValueError(f"Transcription failed: {e}") from e
 
-    # 2. Diarize
-    diarized = _diarize(segments, client)
+    segments = getattr(transcription, "segments", []) or []
+    full_text = getattr(transcription, "text", "") or ""
+    log.info("Transcription done: %d segments, %d chars", len(segments), len(full_text))
 
-    # 3. Extract medical info
-    extraction = _extract_medical_info(diarized, client) if diarized else {}
+    # If no segments but we have text, create a single segment from full text
+    if not segments and full_text:
+        class _Seg:
+            start = 0.0
+            end = 0.0
+            text = full_text
+        segments = [_Seg()]
 
-    # 4. Persist transcript to MongoDB
+    try:
+        diarized = await loop.run_in_executor(None, partial(_diarize_sync, segments))
+    except Exception as e:
+        log.warning("Diarization failed, continuing without it: %s", e)
+        diarized = [{"start": 0.0, "end": 0.0, "speaker": "Unknown", "text": full_text}] if full_text else []
+
+    try:
+        extraction = await loop.run_in_executor(None, partial(_extract_medical_info_sync, diarized))
+    except Exception as e:
+        log.warning("Medical extraction failed, continuing without it: %s", e)
+        extraction = {}
+
+    # Duration from last segment end, or 0
+    audio_duration = round(diarized[-1]["end"], 1) if diarized and diarized[-1].get("end") else 0
+
+    # Persist transcript to MongoDB
     db = get_db()
     doc = {
         "doctor_id": doctor_id,
@@ -179,13 +217,15 @@ async def process_audio(
         "full_transcript": full_text,
         "diarized_transcript": diarized,
         "medical_extraction": extraction,
-        "audio_duration_seconds": (
-            round(diarized[-1]["end"], 1) if diarized else 0
-        ),
+        "audio_duration_seconds": audio_duration,
         "created_at": datetime.now(timezone.utc),
     }
     result = await db.transcripts.insert_one(doc)
     transcript_id = str(result.inserted_id)
+    log.info("Transcript saved: %s", transcript_id)
+
+    prescribed_medicines = extraction.get("prescribed_medicines") or []
+    lab_tests_raw = extraction.get("lab_tests") or []
 
     return {
         "transcript_id": transcript_id,
@@ -205,7 +245,8 @@ async def process_audio(
                     "timing": m.get("timing", ""),
                     "notes": m.get("notes", ""),
                 }
-                for m in extraction.get("prescribed_medicines", [])
+                for m in prescribed_medicines
+                if m.get("medicine_name")
             ],
             "lab_tests": [
                 {
@@ -213,7 +254,8 @@ async def process_audio(
                     "category": t.get("category", "Other"),
                     "notes": t.get("notes", ""),
                 }
-                for t in extraction.get("lab_tests", [])
+                for t in lab_tests_raw
+                if t.get("test_name")
             ],
         },
     }

@@ -111,8 +111,46 @@ async def get_pending(user_id: str, role: str) -> list:
         query["doctor_id"] = user_id
     else:
         query["assistant_id"] = user_id
-    cursor = db.connection_requests.find(query)
-    return [serialize_doc(r) async for r in cursor]
+
+    result = []
+    async for r in db.connection_requests.find(query):
+        doc = serialize_doc(r)
+
+        # Attach human-readable names so the frontend can display them
+        try:
+            doctor = await db.users.find_one({"_id": ObjectId(doc["doctor_id"])})
+            doc["doctor_name"] = doctor.get("name") if doctor else None
+        except Exception:
+            doc["doctor_name"] = None
+
+        try:
+            assistant = await db.users.find_one({"_id": ObjectId(doc["assistant_id"])})
+            if assistant:
+                doc["assistant_name"] = assistant.get("name")
+                doc["assistant_phone"] = assistant.get("phone")
+                doc["qualification"] = assistant.get("specialty")
+                doc["experience_years"] = assistant.get("experience_years")
+                doc["city"] = assistant.get("city")
+                doc["assistant_address"] = assistant.get("address")
+            else:
+                doc["assistant_name"] = None
+                doc["assistant_phone"] = None
+        except Exception:
+            doc["assistant_name"] = None
+            doc["assistant_phone"] = None
+
+        # Attach clinic name
+        try:
+            if doc.get("clinic_id"):
+                clinic = await db.clinics.find_one({"_id": ObjectId(doc["clinic_id"])})
+                doc["clinic_name"] = clinic.get("name") if clinic else None
+            else:
+                doc["clinic_name"] = None
+        except Exception:
+            doc["clinic_name"] = None
+
+        result.append(doc)
+    return result
 
 
 async def get_team(clinic_id: str) -> list:

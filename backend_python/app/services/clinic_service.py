@@ -4,10 +4,29 @@ from app.config.database import get_db
 from app.models.common import serialize_doc
 
 
-async def get_clinics() -> list:
+async def get_clinics(search: str = None) -> list:
     db = get_db()
-    cursor = db.clinics.find({})
-    return [serialize_doc(c) async for c in cursor]
+    query = {}
+    if search:
+        import re
+        query["name"] = {"$regex": re.escape(search), "$options": "i"}
+
+    cursor = db.clinics.find(query)
+    result = []
+    async for c in cursor:
+        doc = serialize_doc(c)
+        # Attach the owner doctor's name so the frontend can show "Dr. X"
+        owner_id = doc.get("owner_id")
+        if owner_id:
+            try:
+                owner = await db.users.find_one({"_id": ObjectId(owner_id)})
+                doc["doctor_name"] = owner.get("name") if owner else None
+            except Exception:
+                doc["doctor_name"] = None
+        else:
+            doc["doctor_name"] = None
+        result.append(doc)
+    return result
 
 
 async def get_doctors_in_clinic(clinic_id: str) -> list:
@@ -18,6 +37,9 @@ async def get_doctors_in_clinic(clinic_id: str) -> list:
         doc = serialize_doc(u)
         doc.pop("password_hash", None)
         doc.pop("otp_hash", None)
+        # Normalize snake_case → camelCase fields the frontend expects
+        doc["doctorCode"] = doc.get("doctor_code")
+        doc["regNumber"] = doc.get("reg_number")
         doctors.append(doc)
     return doctors
 
@@ -57,7 +79,7 @@ async def create_or_update_clinic(user_id: str, clinic_id: str, data: dict) -> d
 
 async def get_doctor_status(clinic_id: str) -> list:
     db = get_db()
-    threshold = datetime.now(timezone.utc) - timedelta(minutes=5)
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=15)
     cursor = db.users.find({"clinic_id": clinic_id, "role": "doctor"})
     result = []
     async for doc in cursor:

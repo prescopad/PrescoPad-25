@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
 from typing import Optional
 from bson import ObjectId
 from app.config.database import get_db
@@ -47,6 +47,32 @@ async def update_patient(clinic_id: str, patient_id: str, data: dict) -> dict:
     return serialize_doc(patient)
 
 
+# ─── Queue helpers ────────────────────────────────────────────────────────────
+
+async def _enrich_queue_items(db, queue_docs: list) -> list:
+    """Join patient data into each queue item so the frontend gets full patient info."""
+    result = []
+    for q in queue_docs:
+        doc = serialize_doc(q)
+        patient_id = doc.get("patient_id")
+        if patient_id:
+            try:
+                patient = await db.patients.find_one({"_id": ObjectId(patient_id)})
+                if patient:
+                    doc["patient_name"] = patient.get("name")
+                    doc["patient_age"] = patient.get("age")
+                    doc["patient_gender"] = patient.get("gender")
+                    doc["patient_phone"] = patient.get("phone", "")
+                    doc["patient_weight"] = patient.get("weight")
+                    doc["patient_address"] = patient.get("address", "")
+                    doc["patient_blood_group"] = patient.get("blood_group", "")
+                    doc["patient_allergies"] = patient.get("allergies", "")
+            except Exception:
+                pass
+        result.append(doc)
+    return result
+
+
 # ─── Queue ────────────────────────────────────────────────────────────────────
 
 async def get_today_queue(clinic_id: str) -> list:
@@ -57,8 +83,8 @@ async def get_today_queue(clinic_id: str) -> list:
         "added_at": {"$gte": today_start},
         "is_deleted": {"$ne": True},
     }
-    cursor = db.queue.find(query).sort("added_at", 1)
-    return [serialize_doc(q) async for q in cursor]
+    docs = [q async for q in db.queue.find(query).sort("added_at", 1)]
+    return await _enrich_queue_items(db, docs)
 
 
 async def get_queue_stats(clinic_id: str) -> dict:
@@ -94,18 +120,29 @@ async def get_filtered_queue(clinic_id: str, status: str = None, date_str: str =
             query["added_at"] = {"$gte": start, "$lte": end}
         except Exception:
             pass
-    cursor = db.queue.find(query).sort("added_at", -1)
-    return [serialize_doc(q) async for q in cursor]
+    docs = [q async for q in db.queue.find(query).sort("added_at", -1)]
+    return await _enrich_queue_items(db, docs)
 
 
 async def get_patient_queue_history(clinic_id: str, patient_id: str) -> list:
     db = get_db()
-    cursor = db.queue.find({"clinic_id": clinic_id, "patient_id": patient_id, "is_deleted": {"$ne": True}}).sort("added_at", -1)
-    return [serialize_doc(q) async for q in cursor]
+    docs = [q async for q in db.queue.find(
+        {"clinic_id": clinic_id, "patient_id": patient_id, "is_deleted": {"$ne": True}}
+    ).sort("added_at", -1)]
+    return await _enrich_queue_items(db, docs)
 
 
 async def add_to_queue(clinic_id: str, user_id: str, patient_id: str, notes: str = None) -> dict:
     db = get_db()
+
+    # Validate patient exists in this clinic
+    try:
+        patient = await db.patients.find_one({"_id": ObjectId(patient_id), "clinic_id": clinic_id})
+    except Exception:
+        patient = None
+    if not patient:
+        raise ValueError("Patient not found in this clinic")
+
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     count = await db.queue.count_documents({"clinic_id": clinic_id, "added_at": {"$gte": today_start}})
     token_number = count + 1
@@ -125,7 +162,8 @@ async def add_to_queue(clinic_id: str, user_id: str, patient_id: str, notes: str
     }
     result = await db.queue.insert_one(doc)
     q = await db.queue.find_one({"_id": result.inserted_id})
-    return serialize_doc(q)
+    enriched = await _enrich_queue_items(db, [q])
+    return enriched[0]
 
 
 async def update_queue_status(clinic_id: str, queue_id: str, status: str) -> dict:
@@ -138,7 +176,8 @@ async def update_queue_status(clinic_id: str, queue_id: str, status: str) -> dic
 
     await db.queue.update_one({"_id": ObjectId(queue_id), "clinic_id": clinic_id}, {"$set": update})
     q = await db.queue.find_one({"_id": ObjectId(queue_id)})
-    return serialize_doc(q)
+    enriched = await _enrich_queue_items(db, [q])
+    return enriched[0]
 
 
 async def remove_from_queue(clinic_id: str, queue_id: str):

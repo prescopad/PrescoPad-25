@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
 import { DoctorStackParamList } from '../types/navigation.types';
+import api from '../services/api';
 
 // Doctor screens
 import DoctorDashboard from '../screens/doctor/DoctorDashboard';
@@ -77,6 +79,36 @@ function DoctorSettingsStack(): React.JSX.Element {
 }
 
 export default function DoctorTabNavigator(): React.JSX.Element {
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const sendHeartbeat = () => {
+      api.post('/auth/heartbeat').catch(() => {});
+    };
+
+    sendHeartbeat();
+    heartbeatRef.current = setInterval(sendHeartbeat, 60_000);
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        sendHeartbeat();
+        if (!heartbeatRef.current) {
+          heartbeatRef.current = setInterval(sendHeartbeat, 60_000);
+        }
+      } else {
+        if (heartbeatRef.current) {
+          clearInterval(heartbeatRef.current);
+          heartbeatRef.current = null;
+        }
+      }
+    });
+
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      sub.remove();
+    };
+  }, []);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({

@@ -71,7 +71,9 @@ export default function AssistantDashboard(): React.JSX.Element {
     const checkDoctorStatus = async () => {
       try {
         const res = await api.get('/clinic/doctor-status');
-        setDoctorReady(res.data.online ?? false);
+        // doctors is an array — online if at least one doctor is active
+        const doctors: { is_online: boolean }[] = res.data.doctors ?? [];
+        setDoctorReady(doctors.some((d) => d.is_online));
       } catch {
         setDoctorReady(false);
       }
