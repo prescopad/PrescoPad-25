@@ -3,11 +3,14 @@ services:
     name: prescopad-api
     runtime: node
     rootDir: backend
+    healthCheckPath: /api/health
     buildCommand: npm install && npm run build && cp -r src/db/migrations dist/db/ && node dist/db/migrate.js
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: ALLOWED_ORIGINS
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
