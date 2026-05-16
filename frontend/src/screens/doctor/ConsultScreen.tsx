@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -40,6 +41,15 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
   const [diagnosis, setDiagnosis] = useState(currentDraft.diagnosis);
   const [advice, setAdvice] = useState(currentDraft.advice);
   const [followUpDate, setFollowUpDate] = useState(currentDraft.followUpDate);
+
+  // Sync local text fields when returning from AITranscriptionScreen
+  useFocusEffect(
+    useCallback(() => {
+      setDiagnosis(currentDraft.diagnosis);
+      setAdvice(currentDraft.advice);
+      setFollowUpDate(currentDraft.followUpDate);
+    }, [currentDraft.diagnosis, currentDraft.advice, currentDraft.followUpDate])
+  );
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
@@ -195,6 +205,22 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* AI Transcription */}
+        <TouchableOpacity
+          style={styles.aiBtn}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('AITranscription', { queueItem, patient })}
+        >
+          <View style={styles.aiBtnIcon}>
+            <Ionicons name="mic" size={18} color={COLORS.white} />
+          </View>
+          <View style={styles.aiBtnText}>
+            <Text style={styles.aiBtnTitle}>AI Consultation Recording</Text>
+            <Text style={styles.aiBtnSub}>Record, transcribe &amp; auto-fill prescription</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+        </TouchableOpacity>
 
         {/* Diagnosis */}
         <View style={styles.section}>
@@ -384,6 +410,30 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: SPACING.lg,
   },
+
+  // AI Button
+  aiBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primarySurface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.primaryLight,
+    gap: SPACING.sm,
+  },
+  aiBtnIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiBtnText: { flex: 1 },
+  aiBtnTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
+  aiBtnSub: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
 
   // Patient Card
   patientCard: {

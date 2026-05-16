@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from app.config.database import connect_db, close_db
 from app.config.settings import settings
-from app.routes import auth, wallet, clinic, connection, data, notification, analytics
+from app.routes import auth, wallet, clinic, connection, data, notification, analytics, transcription
 
 
 @asynccontextmanager
@@ -36,6 +36,7 @@ app.include_router(connection.router)
 app.include_router(data.router)
 app.include_router(notification.router)
 app.include_router(analytics.router)
+app.include_router(transcription.router)
 
 
 @app.get("/api/health")

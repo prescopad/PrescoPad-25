@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     ALLOWED_ORIGINS: Optional[str] = None
 
+    GROQ_API_KEY: Optional[str] = None
+
     @property
     def allowed_origins_list(self) -> list[str]:
         if self.ALLOWED_ORIGINS:

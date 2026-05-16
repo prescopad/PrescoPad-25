@@ -54,3 +54,9 @@ async def _create_indexes(db: AsyncIOMotorDatabase):
 
     await db.notification_jobs.create_index("user_id")
     await db.notification_jobs.create_index("status")
+
+    await db.transcripts.create_index("clinic_id")
+    await db.transcripts.create_index("patient_id")
+    await db.transcripts.create_index("doctor_id")
+    await db.transcripts.create_index([("clinic_id", 1), ("patient_id", 1)])
+    await db.transcripts.create_index("created_at")

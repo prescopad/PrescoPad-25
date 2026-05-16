@@ -14,6 +14,8 @@ import PrescriptionPreviewScreen from '../screens/doctor/PrescriptionPreviewScre
 import RxSuccessScreen from '../screens/doctor/RxSuccessScreen';
 import PatientHistoryScreen from '../screens/doctor/PatientHistoryScreen';
 import AnalyticsScreen from '../screens/doctor/AnalyticsScreen';
+import AITranscriptionScreen from '../screens/doctor/AITranscriptionScreen';
+import TranscriptHistoryScreen from '../screens/doctor/TranscriptHistoryScreen';
 
 // Shared screens
 import WalletScreen from '../screens/shared/WalletScreen';
@@ -39,6 +41,8 @@ function DoctorQueueStack(): React.JSX.Element {
       <QueueStack.Screen name="PrescriptionPreview" component={PrescriptionPreviewScreen} options={{ headerShown: false }} />
       <QueueStack.Screen name="RxSuccess" component={RxSuccessScreen} options={{ headerShown: false }} />
       <QueueStack.Screen name="PatientHistory" component={PatientHistoryScreen} options={{ headerShown: false }} />
+      <QueueStack.Screen name="AITranscription" component={AITranscriptionScreen} options={{ headerShown: false }} />
+      <QueueStack.Screen name="TranscriptHistory" component={TranscriptHistoryScreen} options={{ headerShown: false }} />
       <QueueStack.Screen name="EditPatient" component={PatientFormScreen} options={{ headerShown: false }} />
       <QueueStack.Screen name="Connection" component={ConnectionScreen} options={{ headerShown: false }} />
     </QueueStack.Navigator>
