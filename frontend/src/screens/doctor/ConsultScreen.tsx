@@ -1,5 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -33,28 +32,38 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
     updateDraft,
     removeMedicine,
     removeLabTest,
-    resetDraft,
     createPrescription,
+    resetDraft,
+    setQueueItemId,
     isLoading,
   } = usePrescriptionStore();
 
-  const [diagnosis, setDiagnosis] = useState(currentDraft.diagnosis);
-  const [advice, setAdvice] = useState(currentDraft.advice);
-  const [followUpDate, setFollowUpDate] = useState(currentDraft.followUpDate);
-
-  // Sync local text fields when returning from AITranscriptionScreen
-  useFocusEffect(
-    useCallback(() => {
-      setDiagnosis(currentDraft.diagnosis);
-      setAdvice(currentDraft.advice);
-      setFollowUpDate(currentDraft.followUpDate);
-    }, [currentDraft.diagnosis, currentDraft.advice, currentDraft.followUpDate])
-  );
+  const aiApplied = usePrescriptionStore((s) => s.aiApplied);
   const [isCreating, setIsCreating] = useState(false);
 
+  // Derived: which fields were left empty after AI applied?
+  const missingDiagnosis   = aiApplied && !currentDraft.diagnosis.trim();
+  const missingMedicines   = aiApplied && currentDraft.medicines.length === 0;
+  const missingLabTests    = aiApplied && currentDraft.labTests.length === 0;
+  const missingAdvice      = aiApplied && !currentDraft.advice.trim();
+  const missingFollowUp    = aiApplied && !currentDraft.followUpDate.trim();
+
+  // Reset draft when doctor leaves Consult via back button (not forward to Preview)
   useEffect(() => {
-    // Initialize draft with patient data on mount
-    resetDraft();
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      resetDraft();
+    });
+    return unsubscribe;
+  }, [navigation, resetDraft]);
+
+  useEffect(() => {
+    // Always store the queue item ID so finalization can mark it completed.
+    setQueueItemId(queueItem.id);
+
+    // If AI/transcript data was already applied, don't touch the draft — it's pre-filled.
+    if (aiApplied) return;
+
+    // Fresh consultation — initialise draft with patient info only.
     updateDraft({
       patientId: patient?.id || queueItem.patientId,
       patientName: patient?.name || 'Unknown',
@@ -66,32 +75,15 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleDiagnosisChange = (text: string) => {
-    setDiagnosis(text);
-    updateDraft({ diagnosis: text });
-  };
-
-  const handleAdviceChange = (text: string) => {
-    setAdvice(text);
-    updateDraft({ advice: text });
-  };
+  const handleDiagnosisChange = (text: string) => updateDraft({ diagnosis: text });
+  const handleAdviceChange = (text: string) => updateDraft({ advice: text });
 
   const handleFollowUpChange = (text: string) => {
-    // Allow only digits and forward slashes for DD/MM/YYYY
     const cleaned = text.replace(/[^0-9/]/g, '');
     let formatted = cleaned;
-
-    // Auto-insert slashes
-    if (cleaned.length === 2 && followUpDate.length < 3) {
-      formatted = cleaned + '/';
-    } else if (cleaned.length === 5 && followUpDate.length < 6) {
-      formatted = cleaned + '/';
-    }
-
-    if (formatted.length <= 10) {
-      setFollowUpDate(formatted);
-      updateDraft({ followUpDate: formatted });
-    }
+    if (cleaned.length === 2 && currentDraft.followUpDate.length < 3) formatted = cleaned + '/';
+    else if (cleaned.length === 5 && currentDraft.followUpDate.length < 6) formatted = cleaned + '/';
+    if (formatted.length <= 10) updateDraft({ followUpDate: formatted });
   };
 
   const handleAddMedicine = () => {
@@ -133,7 +125,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
   };
 
   const handlePreview = async () => {
-    if (!diagnosis.trim()) {
+    if (!currentDraft.diagnosis.trim()) {
       Alert.alert('Required', 'Please enter a diagnosis.');
       return;
     }
@@ -190,7 +182,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
               {patient?.weight ? (
                 <Text style={styles.patientMeta}>Weight: {patient.weight} kg</Text>
               ) : null}
-              {patient?.allergies ? (
+              {patient?.allergies && !['no', 'none', 'n/a', 'nil', '-', 'nill'].includes(patient.allergies.toLowerCase().trim()) ? (
                 <View style={styles.allergyBadge}>
                   <Ionicons name="warning" size={12} color={COLORS.error} />
                   <Text style={styles.allergyText}>Allergies: {patient.allergies}</Text>
@@ -224,12 +216,15 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
         {/* Diagnosis */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Diagnosis *</Text>
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionTitle}>Diagnosis *</Text>
+            {missingDiagnosis && <MissingBadge />}
+          </View>
           <TextInput
-            style={styles.diagnosisInput}
+            style={[styles.diagnosisInput, missingDiagnosis && styles.inputMissing]}
             placeholder="Enter diagnosis..."
             placeholderTextColor={COLORS.textLight}
-            value={diagnosis}
+            value={currentDraft.diagnosis}
             onChangeText={handleDiagnosisChange}
             multiline
             numberOfLines={3}
@@ -240,9 +235,12 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         {/* Medicines */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>
-              Medicines ({currentDraft.medicines.length})
-            </Text>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionTitle}>
+                Medicines ({currentDraft.medicines.length})
+              </Text>
+              {missingMedicines && <MissingBadge />}
+            </View>
             <TouchableOpacity
               style={styles.addButton}
               onPress={handleAddMedicine}
@@ -255,12 +253,12 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
           {currentDraft.medicines.length === 0 ? (
             <TouchableOpacity
-              style={styles.emptySection}
+              style={[styles.emptySection, missingMedicines && styles.emptySectionMissing]}
               onPress={handleAddMedicine}
               activeOpacity={0.7}
             >
-              <Ionicons name="medical-outline" size={24} color={COLORS.textLight} />
-              <Text style={styles.emptyText}>Tap to add medicines</Text>
+              <Ionicons name="medical-outline" size={24} color={missingMedicines ? COLORS.warning : COLORS.textLight} />
+              <Text style={[styles.emptyText, missingMedicines && styles.emptyTextMissing]}>Tap to add medicines</Text>
             </TouchableOpacity>
           ) : (
             currentDraft.medicines.map((med: MedicineDraft, index: number) => (
@@ -293,9 +291,12 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         {/* Lab Tests */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>
-              Lab Tests ({currentDraft.labTests.length})
-            </Text>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionTitle}>
+                Lab Tests ({currentDraft.labTests.length})
+              </Text>
+              {missingLabTests && <MissingBadge />}
+            </View>
             <TouchableOpacity
               style={styles.addButton}
               onPress={handleAddLabTest}
@@ -308,12 +309,12 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
           {currentDraft.labTests.length === 0 ? (
             <TouchableOpacity
-              style={styles.emptySection}
+              style={[styles.emptySection, missingLabTests && styles.emptySectionMissing]}
               onPress={handleAddLabTest}
               activeOpacity={0.7}
             >
-              <Ionicons name="flask-outline" size={24} color={COLORS.textLight} />
-              <Text style={styles.emptyText}>Tap to add lab tests</Text>
+              <Ionicons name="flask-outline" size={24} color={missingLabTests ? COLORS.warning : COLORS.textLight} />
+              <Text style={[styles.emptyText, missingLabTests && styles.emptyTextMissing]}>Tap to add lab tests</Text>
             </TouchableOpacity>
           ) : (
             currentDraft.labTests.map((test: LabTestDraft, index: number) => (
@@ -340,12 +341,15 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
         {/* Additional Advice */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Additional Advice</Text>
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionTitle}>Additional Advice</Text>
+            {missingAdvice && <MissingBadge />}
+          </View>
           <TextInput
-            style={styles.adviceInput}
+            style={[styles.adviceInput, missingAdvice && styles.inputMissing]}
             placeholder="Any additional advice for the patient..."
             placeholderTextColor={COLORS.textLight}
-            value={advice}
+            value={currentDraft.advice}
             onChangeText={handleAdviceChange}
             multiline
             numberOfLines={2}
@@ -355,14 +359,17 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
         {/* Follow-up Date */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Follow-up Date</Text>
-          <View style={styles.followUpRow}>
-            <Ionicons name="calendar-outline" size={20} color={COLORS.textMuted} />
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionTitle}>Follow-up Date</Text>
+            {missingFollowUp && <MissingBadge />}
+          </View>
+          <View style={[styles.followUpRow, missingFollowUp && styles.inputMissing]}>
+            <Ionicons name="calendar-outline" size={20} color={missingFollowUp ? COLORS.warning : COLORS.textMuted} />
             <TextInput
               style={styles.followUpInput}
               placeholder="DD/MM/YYYY"
               placeholderTextColor={COLORS.textLight}
-              value={followUpDate}
+              value={currentDraft.followUpDate}
               onChangeText={handleFollowUpChange}
               keyboardType="numeric"
               maxLength={10}
@@ -398,6 +405,29 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
     </KeyboardAvoidingView>
   );
 }
+
+function MissingBadge() {
+  return (
+    <View style={badgeStyles.badge}>
+      <Ionicons name="alert-circle-outline" size={12} color={COLORS.warning} />
+      <Text style={badgeStyles.text}>Not in conversation</Text>
+    </View>
+  );
+}
+
+const badgeStyles = StyleSheet.create({
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.warningLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  text: { fontSize: 10, fontWeight: '600', color: COLORS.warning },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -504,11 +534,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.sm,
   },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.text,
-    marginBottom: SPACING.sm,
+  },
+
+  // Highlighted (AI found nothing for this field)
+  inputMissing: {
+    borderColor: COLORS.warning,
+    borderWidth: 1.5,
+    backgroundColor: COLORS.warningLight,
+  },
+  emptySectionMissing: {
+    borderColor: COLORS.warning,
+    backgroundColor: COLORS.warningLight,
+  },
+  emptyTextMissing: {
+    color: COLORS.warning,
   },
 
   // Inputs

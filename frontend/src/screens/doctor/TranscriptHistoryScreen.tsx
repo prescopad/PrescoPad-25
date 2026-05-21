@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,21 +6,25 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  Alert,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DoctorStackParamList } from '../../types/navigation.types';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
-import { getPatientTranscripts, Transcript } from '../../services/transcriptionService';
+import { getPatientTranscripts, Transcript, PrescriptionAutofill } from '../../services/transcriptionService';
+import { usePrescriptionStore } from '../../store/usePrescriptionStore';
 
 type Props = NativeStackScreenProps<DoctorStackParamList, 'TranscriptHistory'>;
 
 export default function TranscriptHistoryScreen({ navigation, route }: Props): React.JSX.Element {
-  const { patientId, patientName } = route.params;
+  const { patientId, patientName, queueItem, patient } = route.params;
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  const { updateDraft, setAiApplied } = usePrescriptionStore();
 
   useEffect(() => {
     (async () => {
@@ -34,6 +38,82 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
       }
     })();
   }, [patientId]);
+
+  const handleUseForPrescription = (t: Transcript) => {
+    if (!queueItem || !patient) {
+      Alert.alert('Not available', 'Open this screen from a patient consultation to use a transcript.');
+      return;
+    }
+
+    const ext = (t.medical_extraction || {}) as Record<string, unknown>;
+    const rawMeds = (ext.prescribed_medicines as Record<string, unknown>[] | null) || [];
+    const rawTests = (ext.lab_tests as Record<string, unknown>[] | null) || [];
+
+    const autofill: PrescriptionAutofill = {
+      diagnosis: String(ext.diagnosis || ext.chief_complaint || ''),
+      advice: String(ext.advice || ''),
+      follow_up_date: String(ext.follow_up_date || ''),
+      medicines: rawMeds
+        .filter((m) => m.medicine_name)
+        .map((m) => ({
+          medicine_name: String(m.medicine_name || ''),
+          type: String(m.type || 'Tablet'),
+          dosage: String(m.dosage || ''),
+          frequency: String(m.frequency || ''),
+          duration: String(m.duration || ''),
+          timing: String(m.timing || ''),
+          notes: String(m.notes || ''),
+        })),
+      lab_tests: rawTests
+        .filter((t) => t.test_name)
+        .map((t) => ({
+          test_name: String(t.test_name || ''),
+          category: String(t.category || 'Other'),
+          notes: String(t.notes || ''),
+        })),
+    };
+
+    Alert.alert(
+      'Use this transcript?',
+      'This will apply the extracted diagnosis, medicines, and lab tests to a new prescription.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Apply',
+          onPress: () => {
+            // Single atomic update — avoids race condition where ConsultScreen
+            // mounts between separate store calls and resets the draft.
+            updateDraft({
+              patientId: patient.id,
+              patientName: patient.name,
+              patientAge: patient.age ? String(patient.age) : '',
+              patientGender: patient.gender || '',
+              patientPhone: patient.phone || '',
+              diagnosis: autofill.diagnosis,
+              advice: autofill.advice,
+              followUpDate: autofill.follow_up_date,
+              medicines: autofill.medicines.map((m) => ({
+                medicineName: m.medicine_name,
+                type: m.type || 'Tablet',
+                dosage: m.dosage || '',
+                frequency: m.frequency || '',
+                duration: m.duration || '',
+                timing: m.timing || '',
+                notes: m.notes || '',
+              })),
+              labTests: autofill.lab_tests.map((lt) => ({
+                testName: lt.test_name,
+                category: lt.category || 'Other',
+                notes: lt.notes || '',
+              })),
+            });
+            setAiApplied(true);
+            navigation.navigate('Consult', { queueItem, patient });
+          },
+        },
+      ],
+    );
+  };
 
   const formatDate = (iso: string) => {
     try {
@@ -160,6 +240,18 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
                     {(!t.diarized_transcript || t.diarized_transcript.length === 0) && t.full_transcript ? (
                       <Text style={styles.fullText}>{t.full_transcript}</Text>
                     ) : null}
+
+                    {/* Apply button — only shown when opened from a consultation */}
+                    {queueItem && patient ? (
+                      <TouchableOpacity
+                        style={styles.applyBtn}
+                        onPress={() => handleUseForPrescription(t)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="document-text-outline" size={16} color={COLORS.white} />
+                        <Text style={styles.applyBtnText}>Use for Prescription</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 )}
               </View>
@@ -255,4 +347,17 @@ const styles = StyleSheet.create({
   segText: { flex: 1, fontSize: 13, color: COLORS.text, lineHeight: 18 },
 
   fullText: { fontSize: 13, color: COLORS.text, lineHeight: 20 },
+
+  applyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    marginTop: SPACING.sm,
+    ...SHADOWS.sm,
+  },
+  applyBtnText: { color: COLORS.white, fontSize: 14, fontWeight: '700' },
 });

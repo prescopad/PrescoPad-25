@@ -268,22 +268,25 @@ async def finalize_prescription(clinic_id: str, doctor_id: str, prescription_id:
     if rx.get("status") != "draft":
         raise ValueError("Prescription already finalized")
 
-    fee = 2.0
+    fee = 1.0
     wallet = await db.wallets.find_one({"user_id": doctor_id})
-    if wallet and wallet["balance"] >= fee:
-        new_balance = wallet["balance"] - fee
-        await db.wallets.update_one({"user_id": doctor_id}, {"$set": {"balance": new_balance, "updated_at": datetime.now(timezone.utc)}})
-        await db.transactions.insert_one({
-            "wallet_id": str(wallet["_id"]),
-            "type": "debit",
-            "amount": fee,
-            "description": f"Prescription fee for {prescription_id}",
-            "reference_id": prescription_id,
-            "created_at": datetime.now(timezone.utc),
-        })
-        wallet_deducted = fee
-    else:
-        wallet_deducted = 0.0
+    if not wallet or wallet["balance"] < fee:
+        raise ValueError("Insufficient wallet balance. Please recharge to issue a prescription.")
+
+    new_balance = wallet["balance"] - fee
+    await db.wallets.update_one(
+        {"user_id": doctor_id},
+        {"$set": {"balance": new_balance, "updated_at": datetime.now(timezone.utc)}}
+    )
+    await db.transactions.insert_one({
+        "wallet_id": str(wallet["_id"]),
+        "type": "debit",
+        "amount": fee,
+        "description": f"Prescription fee for {prescription_id}",
+        "reference_id": prescription_id,
+        "created_at": datetime.now(timezone.utc),
+    })
+    wallet_deducted = fee
 
     await db.prescriptions.update_one(
         {"_id": prescription_id},

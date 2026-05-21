@@ -112,7 +112,7 @@ export default function PatientHistoryScreen({ navigation, route }: Props): Reac
                   <Text style={styles.detailChipText}>{patient.weight} kg</Text>
                 </View>
               ) : null}
-              {patient.allergies ? (
+              {patient.allergies && !['no', 'none', 'n/a', 'nil', '-', 'nill'].includes(patient.allergies.toLowerCase().trim()) ? (
                 <View style={[styles.detailChip, styles.allergyChip]}>
                   <Ionicons name="warning" size={12} color={COLORS.warning} />
                   <Text style={[styles.detailChipText, styles.allergyText]}>{patient.allergies}</Text>

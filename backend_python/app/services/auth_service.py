@@ -48,7 +48,7 @@ async def send_otp(phone: str, role: str) -> dict:
 
         if role == "doctor":
             clinic_doc = {
-                "name": f"Dr. Clinic",
+                "name": f"Dr. Clinic ({phone})",
                 "address": None,
                 "phone": phone,
                 "email": None,
@@ -118,14 +118,11 @@ async def login_with_password(phone: str, password: str, role: str) -> dict:
         raise ValueError("Invalid credentials")
 
     if not user.get("password_hash"):
-        pw_hash = hash_password(password)
-        await db.users.update_one(
-            {"_id": user["_id"]},
-            {"$set": {"password_hash": pw_hash, "updated_at": datetime.now(timezone.utc)}}
-        )
-    else:
-        if not verify_password(password, user["password_hash"]):
-            raise ValueError("Invalid credentials")
+        # No password set yet — account not fully registered, must use OTP
+        raise ValueError("No password set. Please login with OTP.")
+
+    if not verify_password(password, user["password_hash"]):
+        raise ValueError("Invalid credentials")
 
     await db.users.update_one(
         {"_id": user["_id"]},

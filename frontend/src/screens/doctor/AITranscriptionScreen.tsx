@@ -16,7 +16,6 @@ import { DoctorStackParamList } from '../../types/navigation.types';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { usePrescriptionStore } from '../../store/usePrescriptionStore';
 import { analyzeConsultationAudio, DiarizedSegment, PrescriptionAutofill } from '../../services/transcriptionService';
-import { PrescriptionMedicine, PrescriptionLabTest } from '../../types/prescription.types';
 
 type Props = NativeStackScreenProps<DoctorStackParamList, 'AITranscription'>;
 
@@ -42,7 +41,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
   const startTimeRef = useRef<number>(0);
   const pausedElapsedRef = useRef<number>(0);
 
-  const { updateDraft, addMedicine, addLabTest, resetDraft } = usePrescriptionStore();
+  const { updateDraft, setAiApplied } = usePrescriptionStore();
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -209,41 +208,39 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
   const handleApplyAndContinue = () => {
     if (!autofill) return;
 
-    // Reset draft and re-populate with patient info + AI data
-    resetDraft();
+    // Write everything in a single store update to avoid race conditions.
+    // setAiApplied(true) tells ConsultScreen not to reset the draft on mount.
+    const medicines = autofill.medicines.map((m) => ({
+      medicineName: m.medicine_name,
+      type: m.type || 'Tablet',
+      dosage: m.dosage || '',
+      frequency: m.frequency || '',
+      duration: m.duration || '',
+      timing: m.timing || '',
+      notes: m.notes || '',
+    }));
+
+    const labTests = autofill.lab_tests.map((t) => ({
+      testName: t.test_name,
+      category: t.category || 'Other',
+      notes: t.notes || '',
+    }));
+
+    // Single atomic update — no resetDraft() so nothing gets wiped mid-flight
     updateDraft({
       patientId: patient.id,
       patientName: patient.name,
       patientAge: patient.age ? String(patient.age) : '',
       patientGender: patient.gender || '',
       patientPhone: patient.phone || '',
-      diagnosis: autofill.diagnosis,
-      advice: autofill.advice,
-      followUpDate: autofill.follow_up_date,
+      diagnosis: autofill.diagnosis || '',
+      advice: autofill.advice || '',
+      followUpDate: autofill.follow_up_date || '',
+      medicines,
+      labTests,
     });
 
-    autofill.medicines.forEach((m) => {
-      const med: Omit<PrescriptionMedicine, 'id' | 'prescriptionId'> = {
-        medicineName: m.medicine_name,
-        type: m.type || 'Tablet',
-        dosage: m.dosage || '',
-        frequency: m.frequency || '',
-        duration: m.duration || '',
-        timing: m.timing || '',
-        notes: m.notes || '',
-      };
-      addMedicine(med);
-    });
-
-    autofill.lab_tests.forEach((t) => {
-      const test: Omit<PrescriptionLabTest, 'id' | 'prescriptionId'> = {
-        testName: t.test_name,
-        category: t.category || 'Other',
-        notes: t.notes || '',
-      };
-      addLabTest(test);
-    });
-
+    setAiApplied(true);
     navigation.navigate('Consult', { queueItem, patient });
   };
 
@@ -466,6 +463,8 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
           onPress={() => navigation.navigate('TranscriptHistory', {
             patientId: patient.id,
             patientName: patient.name,
+            queueItem,
+            patient,
           })}
         >
           <Ionicons name="time-outline" size={22} color={COLORS.primary} />

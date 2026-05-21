@@ -53,16 +53,16 @@ def _diarize_sync(segments: list) -> list:
         for i, seg in enumerate(segments)
     )
 
-    prompt = f"""You are analyzing a recorded medical consultation between a doctor and a patient.
+    prompt = f"""You are analyzing a recorded medical consultation from an Indian clinic between a doctor and a patient.
 
-Below are numbered speech segments with timestamps extracted from the audio.
-Your task: for each segment, decide whether the speaker is "Doctor" or "Patient".
+Below are numbered speech segments with timestamps. Assign each segment to "Doctor" or "Patient".
 
 Rules:
-- A Doctor typically asks diagnostic questions, explains diagnoses, prescribes medicines, gives medical advice.
-- A Patient typically describes symptoms, answers questions, asks about treatment.
-- Use conversational context and turn-taking to infer speaker identity.
-- Return ONLY valid JSON — an array where each element has: "index" (int), "speaker" (string: "Doctor" or "Patient").
+- Doctor: asks diagnostic questions, names medicines/tests, gives instructions, explains findings, uses medical terminology
+- Patient: describes symptoms, pain, duration of illness, answers doctor's questions, asks about treatment/cost
+- Use turn-taking logic — conversations alternate. If unsure, use surrounding context.
+- In Indian clinics, both Hindi and English may be mixed (Hinglish). A doctor saying "aaram karo" (take rest) or "yeh tablet lo" (take this tablet) is still the Doctor.
+- Return ONLY a JSON array, each element: {{"index": int, "speaker": "Doctor" or "Patient"}}
 
 Segments:
 {numbered}
@@ -103,61 +103,195 @@ def _extract_medical_info_sync(diarized: list) -> dict:
         return {}
 
     client = _groq_client()
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")  # e.g. 2026-05-17
+    today_display = datetime.now(timezone.utc).strftime("%d %B %Y")  # e.g. 17 May 2026
+
     conversation = "\n".join(
         f"{seg['speaker']} ({seg['start']}s): {seg['text']}"
         for seg in diarized
     )
 
-    prompt = f"""You are a medical information extraction assistant for an Indian clinic.
+    prompt = f"""You are an expert medical AI assistant embedded in an Indian clinic management system.
+Your job is to deeply analyze a doctor-patient consultation transcript and extract structured prescription data.
 
-Below is a diarized transcript of a doctor-patient consultation.
-Extract the following and return ONLY valid JSON (no markdown, no explanation):
+TODAY'S DATE: {today_str} ({today_display})
+
+=== CRITICAL RULES — READ CAREFULLY ===
+
+1. INFER, DON'T JUST MATCH KEYWORDS
+   - Doctors and patients speak naturally and informally. They will NOT say "I prescribe" or "my advice is".
+   - Use the full context of the conversation to infer what was said.
+   - Example: Doctor says "Take rest for a week, drink lots of fluids, avoid cold food" → advice = "Take rest for a week, drink plenty of fluids, avoid cold food"
+   - Example: Doctor says "I'll give you a paracetamol for the fever" → extract Paracetamol as a medicine
+   - Example: Patient says "my stomach hurts since 2 days" → symptom = abdominal pain / stomach ache
+
+2. DATE CALCULATION — ALWAYS CALCULATE FROM TODAY ({today_str})
+   - "come after 3 days" → add 3 days to today → output that exact YYYY-MM-DD date
+   - "come next week" → add 7 days to today
+   - "come after 2 weeks" → add 14 days to today
+   - "come next Monday" → calculate the actual date of next Monday from today
+   - "come after a month" → add 30 days to today
+   - "see me on the 20th" → use the 20th of current month (or next month if already past)
+   - NEVER output "after 3 days" as the date. ALWAYS convert to YYYY-MM-DD format.
+   - If no follow-up is mentioned at all → null
+
+3. MEDICINE EXTRACTION — BE THOROUGH
+   - Extract medicines even when mentioned casually: "let me write you an antibiotic", "I'll prescribe a vitamin supplement"
+   - Infer medicine type from name if not stated (e.g. Amoxicillin → Capsule, Cough syrup → Syrup, eye drops → Drops)
+   - Frequency patterns:
+     * "once a day" / "OD" → "1-0-0"
+     * "twice a day" / "BD" → "1-0-1"
+     * "three times a day" / "TDS" → "1-1-1"
+     * "morning and night" → "1-0-1"
+     * "every 8 hours" → "1-1-1"
+     * "at night" / "at bedtime" → "0-0-1"
+     * "SOS" / "as needed" → "As needed"
+   - Duration: "5 din" = "5 days", "ek hafta" = "1 week", "do hafte" = "2 weeks"
+   - Timing: infer from context — "after meals" → "After food", "on empty stomach" → "Empty stomach", "before sleeping" → "At bedtime"
+
+4. DIAGNOSIS — INFER FROM SYMPTOMS AND DOCTOR STATEMENTS
+   - If doctor explicitly names a diagnosis → use it
+   - If not explicitly named, infer from the symptoms and treatment discussed
+   - Example: Patient says "fever, body ache, cold" and doctor prescribes paracetamol + antibiotic → diagnosis = "Viral fever with upper respiratory tract infection"
+   - Example: Doctor says "looks like you have a stomach infection" → diagnosis = "Gastroenteritis"
+
+5. ADVICE — CAPTURE ALL LIFESTYLE AND CARE INSTRUCTIONS
+   - Everything the doctor tells the patient to do or avoid: rest, diet, fluids, activity restrictions
+   - Example: "avoid spicy food, drink warm water, rest at home for 2 days" → full advice string
+   - Include warnings: "if fever doesn't come down in 2 days, come back immediately"
+
+6. LAB TESTS — ANY TEST THE DOCTOR ORDERS OR SUGGESTS
+   - "get a CBC done" → Complete Blood Count (Blood)
+   - "do a urine test" → Urine Routine (Urine)
+   - "get an X-ray of the chest" → Chest X-Ray (Imaging)
+   - "let's do a blood sugar" → Blood Glucose (Blood)
+   - "get an ultrasound of the abdomen" → Abdominal Ultrasound (Imaging)
+
+7. HINGLISH / MIXED LANGUAGE
+   - This is an Indian clinic. Doctors and patients may mix Hindi and English freely.
+   - "bukhar" = fever, "khana khane ke baad" = after food, "subah shaam" = morning and evening
+   - "do din mein aana" = come in 2 days, "aaram karo" = take rest, "paani piyo" = drink water
+
+=== OUTPUT FORMAT ===
+Return ONLY valid JSON, no markdown, no explanation, no extra text:
 
 {{
-  "chief_complaint": "primary reason for visit in one sentence or null",
-  "diagnosis": "primary diagnosis as a string, or null",
-  "symptoms": ["list of symptom strings mentioned"],
-  "advice": "doctor's advice to patient as a string, or null",
-  "follow_up_date": "follow-up date if mentioned as YYYY-MM-DD or null",
+  "chief_complaint": "primary reason for visit inferred from conversation, or null",
+  "diagnosis": "primary diagnosis — inferred if not explicitly stated, or null",
+  "symptoms": ["all symptoms mentioned or implied"],
+  "advice": "complete doctor advice as a single readable string covering all instructions given, or null",
+  "follow_up_date": "YYYY-MM-DD calculated from today ({today_str}) based on what doctor said, or null",
   "prescribed_medicines": [
     {{
-      "medicine_name": "exact medicine name",
+      "medicine_name": "medicine name",
       "type": "Tablet or Capsule or Syrup or Injection or Drops or Cream or Ointment or Inhaler or Powder or Gel or Patch or Suppository or Other",
-      "dosage": "dosage if mentioned (e.g. 500mg) or empty string",
-      "frequency": "frequency pattern (e.g. 1-0-1, 1-1-1, twice daily) or empty string",
-      "duration": "duration (e.g. 5 days, 1 week) or empty string",
-      "timing": "Before food or After food or With food or Empty stomach or At bedtime or As needed — or empty string",
-      "notes": "any special instructions or empty string"
+      "dosage": "dosage strength e.g. 500mg, or empty string if not mentioned",
+      "frequency": "frequency in 1-0-1 format or plain text e.g. twice daily, or empty string",
+      "duration": "e.g. 5 days, 1 week, or empty string",
+      "timing": "Before food or After food or With food or Empty stomach or At bedtime or As needed, or empty string",
+      "notes": "any special instructions, or empty string"
     }}
   ],
   "lab_tests": [
     {{
-      "test_name": "test name",
+      "test_name": "full test name",
       "category": "Blood or Urine or Stool or Imaging or Microbiology or Cardiology or Pulmonary or Neurology or Pathology or Allergy or Other",
-      "notes": "any special instructions or empty string"
+      "notes": "any instructions e.g. fasting required, or empty string"
     }}
   ]
 }}
 
-Use null for any optional field not mentioned. Extract ALL medicines and tests mentioned.
+=== CONSULTATION TRANSCRIPT ===
+{conversation}
 
-Transcript:
-{conversation}"""
+Remember: TODAY = {today_str}. Calculate all relative dates from this. Think step by step before outputting."""
 
     completion = client.chat.completions.create(
         model=LLAMA_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.1,
-        max_completion_tokens=3000,
+        temperature=0.15,
+        max_completion_tokens=4000,
     )
     raw = completion.choices[0].message.content.strip()
     raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
 
     try:
-        return json.loads(raw)
+        result = json.loads(raw)
+        log.info("Extraction result — diagnosis: %s | advice: %s | follow_up: %s | medicines: %d | lab_tests: %d",
+                 result.get("diagnosis") or result.get("chief_complaint"),
+                 result.get("advice"),
+                 result.get("follow_up_date"),
+                 len(result.get("prescribed_medicines") or []),
+                 len(result.get("lab_tests") or []))
+        return result
     except json.JSONDecodeError:
         log.warning("Medical extraction JSON parse failed, raw: %s", raw[:200])
         return {"error": "Could not parse extraction", "raw": raw}
+
+
+# ── Step 4: Auto-register new medicines / lab tests into clinic database ──────
+
+async def _auto_register_items(clinic_id: str, medicines: list, lab_tests: list):
+    """
+    For each AI-extracted medicine/lab test, upsert into the clinic's custom database:
+    - If the name doesn't exist yet → insert with usage_count=1
+    - If it already exists → increment usage_count
+    Failures are silently swallowed so they never affect the transcription response.
+    """
+    db = get_db()
+
+    for m in medicines:
+        name = (m.get("medicine_name") or "").strip()
+        if not name:
+            continue
+        try:
+            existing = await db.custom_medicines.find_one(
+                {"clinic_id": clinic_id, "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
+            )
+            if existing:
+                await db.custom_medicines.update_one(
+                    {"_id": existing["_id"]},
+                    {"$inc": {"usage_count": 1}, "$set": {"updated_at": datetime.now(timezone.utc)}},
+                )
+            else:
+                await db.custom_medicines.insert_one({
+                    "clinic_id": clinic_id,
+                    "name": name,
+                    "type": m.get("type", "Tablet"),
+                    "strength": m.get("dosage", ""),
+                    "usage_count": 1,
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                })
+                log.info("Auto-registered new medicine: %s", name)
+        except Exception:
+            log.warning("Failed to auto-register medicine: %s", name)
+
+    for t in lab_tests:
+        name = (t.get("test_name") or "").strip()
+        if not name:
+            continue
+        try:
+            existing = await db.custom_lab_tests.find_one(
+                {"clinic_id": clinic_id, "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
+            )
+            if existing:
+                await db.custom_lab_tests.update_one(
+                    {"_id": existing["_id"]},
+                    {"$inc": {"usage_count": 1}, "$set": {"updated_at": datetime.now(timezone.utc)}},
+                )
+            else:
+                await db.custom_lab_tests.insert_one({
+                    "clinic_id": clinic_id,
+                    "name": name,
+                    "category": t.get("category", "Other"),
+                    "usage_count": 1,
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                })
+                log.info("Auto-registered new lab test: %s", name)
+        except Exception:
+            log.warning("Failed to auto-register lab test: %s", name)
 
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
@@ -208,6 +342,11 @@ async def process_audio(
     # Duration from last segment end, or 0
     audio_duration = round(diarized[-1]["end"], 1) if diarized and diarized[-1].get("end") else 0
 
+    # Auto-register any new medicines / lab tests into the clinic's database
+    prescribed_medicines = extraction.get("prescribed_medicines") or []
+    lab_tests_raw = extraction.get("lab_tests") or []
+    await _auto_register_items(clinic_id, prescribed_medicines, lab_tests_raw)
+
     # Persist transcript to MongoDB
     db = get_db()
     doc = {
@@ -223,9 +362,6 @@ async def process_audio(
     result = await db.transcripts.insert_one(doc)
     transcript_id = str(result.inserted_id)
     log.info("Transcript saved: %s", transcript_id)
-
-    prescribed_medicines = extraction.get("prescribed_medicines") or []
-    lab_tests_raw = extraction.get("lab_tests") or []
 
     return {
         "transcript_id": transcript_id,

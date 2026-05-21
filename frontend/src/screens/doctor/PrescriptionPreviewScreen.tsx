@@ -19,6 +19,7 @@ import { useClinicStore } from '../../store/useClinicStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { generatePrescriptionPDF } from '../../services/pdfService';
 import { hashPDF } from '../../services/cryptoService';
+import { updateQueueStatus } from '../../services/dataService';
 import { DoctorStackParamList } from '../../types/navigation.types';
 
 type Props = NativeStackScreenProps<DoctorStackParamList, 'PrescriptionPreview'>;
@@ -27,7 +28,7 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
   const prescriptionId = route.params.prescriptionId;
   const readOnly = route.params.readOnly ?? false;
   const { currentPrescription, loadPrescription, finalizePrescription } = usePrescriptionStore();
-  const { canAfford, deductForPrescription, balance } = useWalletStore();
+  const { canAfford, loadBalance, balance } = useWalletStore();
   const { clinic, doctorProfile } = useClinicStore();
   const { user } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
@@ -54,7 +55,8 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
 
     setIsSigning(true);
     try {
-      // Step 1: Check wallet balance
+      // Step 1: Refresh then check wallet balance
+      await loadBalance();
       const affordable = canAfford();
       if (!affordable) {
         Alert.alert(
@@ -78,19 +80,35 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
       // Step 3: Hash PDF
       const pdfHash = await hashPDF(pdfPath);
 
-      // Step 4: Finalize prescription
+      // Step 4: Finalize prescription (backend deducts ₹1 atomically)
       const signature = doctorProfile?.signatureBase64 || 'digital-signature';
       await finalizePrescription(rx.id, signature, pdfPath, pdfHash);
 
-      // Step 5: Deduct wallet
-      await deductForPrescription();
+      // Step 5: Mark queue item as completed (fire-and-forget)
+      const queueItemId = usePrescriptionStore.getState().queueItemId;
+      if (queueItemId) {
+        updateQueueStatus(queueItemId, 'completed').catch(() => {});
+      }
 
-      // Step 6: Navigate to success
+      // Step 6: Reload wallet balance to reflect backend deduction
+      await loadBalance();
+
+      // Step 7: Navigate to success
       const updatedRx = usePrescriptionStore.getState().currentPrescription;
       navigation.replace('RxSuccess', { prescription: updatedRx || rx });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to issue prescription';
-      Alert.alert('Error', msg);
+      const isWalletError = msg.toLowerCase().includes('wallet') || msg.toLowerCase().includes('balance') || msg.toLowerCase().includes('insufficient');
+      Alert.alert(
+        isWalletError ? 'Insufficient Balance' : 'Error',
+        msg,
+        isWalletError
+          ? [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Recharge', onPress: () => navigation.getParent()?.navigate('DoctorWallet') },
+            ]
+          : [{ text: 'OK' }],
+      );
     } finally {
       setIsSigning(false);
     }

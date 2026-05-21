@@ -15,6 +15,8 @@ interface PrescriptionStore {
   currentPrescription: Prescription | null;
   recentPrescriptions: Prescription[];
   isLoading: boolean;
+  aiApplied: boolean; // true after AI/transcript auto-fill, so ConsultScreen can highlight empty fields
+  queueItemId: string | null; // tracks which queue item this consultation belongs to
 
   // Draft management
   updateDraft: (partial: Partial<PrescriptionDraft>) => void;
@@ -23,6 +25,8 @@ interface PrescriptionStore {
   addLabTest: (test: LabTestDraft) => void;
   removeLabTest: (index: number) => void;
   resetDraft: () => void;
+  setAiApplied: (val: boolean) => void;
+  setQueueItemId: (id: string | null) => void;
 
   // Prescription lifecycle
   createPrescription: (doctorId: string) => Promise<Prescription>;
@@ -51,6 +55,8 @@ export const usePrescriptionStore = create<PrescriptionStore>((set, get) => ({
   currentPrescription: null,
   recentPrescriptions: [],
   isLoading: false,
+  aiApplied: false,
+  queueItemId: null,
 
   updateDraft: (partial) => {
     set((state) => ({
@@ -94,7 +100,9 @@ export const usePrescriptionStore = create<PrescriptionStore>((set, get) => ({
     }));
   },
 
-  resetDraft: () => set({ currentDraft: { ...emptyDraft }, currentPrescription: null }),
+  resetDraft: () => set({ currentDraft: { ...emptyDraft }, currentPrescription: null, aiApplied: false, queueItemId: null }),
+  setAiApplied: (val) => set({ aiApplied: val }),
+  setQueueItemId: (id) => set({ queueItemId: id }),
 
   createPrescription: async (doctorId) => {
     set({ isLoading: true });

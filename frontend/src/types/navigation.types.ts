@@ -27,7 +27,7 @@ export type DoctorStackParamList = {
   DoctorDashboard: undefined;
   Consult: { queueItem: QueueItem; patient: Patient };
   AITranscription: { queueItem: QueueItem; patient: Patient };
-  TranscriptHistory: { patientId: string; patientName: string };
+  TranscriptHistory: { patientId: string; patientName: string; queueItem?: QueueItem; patient?: Patient };
   MedicinePicker: undefined;
   LabTestPicker: undefined;
   PrescriptionPreview: { prescriptionId: string; readOnly?: boolean };
