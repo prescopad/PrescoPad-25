@@ -116,7 +116,8 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       setRecordingState('recording');
       _startTimer();
     } catch (e: unknown) {
-      setError('Could not start recording. Please try again.');
+      const msg = e instanceof Error ? e.message : 'Could not start recording. Please try again.';
+      setError(msg);
     }
   };
 

@@ -1,0 +1,173 @@
+PrescoPad 2.0 — Full Codebase Audit Report
+A clinic management app (doctor + assistant roles, queue, prescriptions, wallet billing, AI consultation transcription). Stack: FastAPI + Motor/MongoDB Atlas backend, React Native / Expo + Zustand + SQLite frontend, Groq Whisper + LLaMA 4 Scout for AI.
+
+Below is the consolidated audit — what works, how it works, the issues found, and concrete improvements.
+
+PART A — WHAT WORKS & HOW IT WORKS
+A1. Backend (FastAPI)
+Subsystem	How it works	Status
+App bootstrap (backend_python/app/main.py)	FastAPI app with lifespan that connects Motor on startup, closes on shutdown. Global exception handler maps Mongo "pool paused" / autoreconnect to 503. CORS middleware reads ALLOWED_ORIGINS.	OK
+Auth (OTP + JWT) (routes/auth.py, services/auth_service.py)	Phone-based OTP (6 digits, bcrypt-hashed, 5-min TTL). Demo mode returns fixed 123456. JWT access (7-day) + refresh (30-day) using HS256. require_doctor() / require_assistant() role guards.	Works, security gaps below
+Data (patients / queue / prescriptions / custom medicines) (routes/data.py, services/data_service.py)	All routes correctly filter by clinic_id. Prescription IDs are human-readable RX-YYYYMMDD-XXXXXXXX. Soft deletes via is_deleted. Composite indexes on (clinic_id, ...).	Mostly OK
+Wallet (services/wallet_service.py)	Per-user wallet, credit / debit / transaction log. ₹1 debited on prescription finalize.	Broken atomicity
+Connection (doctor ↔ assistant) (services/connection_service.py)	Doctor invites by phone OR shares doctor_code; assistant joins; clinic_id propagated on accept.	Works, edge cases
+Transcription (services/transcription_service.py)	Multipart audio → Groq Whisper large-v3-turbo → LLaMA-4-Scout diarization → LLaMA extraction (diagnosis, medicines, lab tests, advice, follow-up) → auto-registers custom medicines/tests for the clinic → persists transcript. Blocking Groq calls offloaded to thread pool.	Pipeline works, hardening needed
+Analytics (services/analytics_service.py)	Aggregates by period (today/week/month): prescription count, earnings, top medicines/tests.	Broken $lookup
+Notifications (services/notification_service.py)	Get-pending + mark-read endpoints exist.	No producer — dead code
+A2. Frontend (Expo)
+Subsystem	How it works	Status
+App init (App.tsx)	2s splash + DB init in parallel, then RootNavigator.	Missing restoreSession call
+Navigation (src/navigation/)	RootNavigator switches AuthStack ↔ DoctorTabs ↔ AssistantTabs based on isAuthenticated and isProfileComplete. Doctor heartbeat polls every 60s; AppState listener pauses on background.	Works
+Auth screens (screens/auth/)	Landing → Login (role pick) → OTP → Registration (if new). Phone & OTP input is validated.	Resend OTP missing, clinic picker missing
+Doctor screens (screens/doctor/)	Dashboard (queue + filters), Consult → MedicinePicker / LabTestPicker → PrescriptionPreview → RxSuccess. AI flow: AITranscription records via expo-av, uploads to backend, atomically writes draft via single updateDraft(...).	Works, edge cases
+Assistant screens (screens/assistant/)	Dashboard + AddPatient + PatientSearch + PatientDetail. Doctor-ready indicator polls every 30s.	Works
+API client (services/api.ts)	Axios instance, JWT injected on every request, 401 → refresh → retry. 10s default timeout (120s overridden for transcription).	Refresh race, no global mutex
+State (Zustand) (store/)	Domain-scoped stores; tokens persisted to SecureStore.	restoreSession never invoked; polling leaks
+SQLite (database/database.ts, seed.ts)	WAL mode; seeds 127 medicines + 71 lab tests on first run; PRAGMA user_version.	No real migrations; non-idempotent seed
+PDF / share (services/pdfService.ts, shareService.ts)	expo-print HTML → PDF, expo-sharing for WhatsApp/SMS. SHA-256 hash via expo-crypto for tamper detection.	Mostly OK
+PART B — ISSUES (RANKED BY SEVERITY)
+B1. 🔴 CRITICAL — fix before any production traffic
+#	Issue	Where	Why it matters
+C1	Wallet deduction not atomic. Read-check-write pattern: read balance → if >= cost → write balance - cost. Two concurrent finalizes can both pass the check and over-debit; a concurrent recharge silently overwrites the debit.	wallet_service.py:40-64, data_service.py:263-296	Financial corruption, overdrafts, lost revenue.
+C2	OTP brute-force is completely open. 6-digit OTP, no attempt counter, no per-phone rate limit, no lockout. 10⁶ space is trivial to enumerate in parallel.	auth_service.py:86-103, otp.py	Anyone can take over any account.
+C3	No file-size limit on /api/transcription/analyze. await audio.read() slurps the whole multipart body into memory.	routes/transcription.py:18-57	One 1 GB upload = OOM crash of the worker.
+C4	Hardcoded admin credentials in DB seed. 9999999999 / Admin@123 are created on every fresh startup.	config/database.py:99-101	Trivial admin takeover in any deployment that forgets to disable.
+C5	OTP_DEMO_MODE = True by default. Anyone who reads 123456 is logged in.	config/settings.py:17-18	Auth bypass if shipped as-is.
+C6	restoreSession() is never called on app boot. User is forced to log in on every cold start even though tokens are in SecureStore.	App.tsx, store/useAuthStore.ts:51-74	Broken UX + perceived logout — but more importantly the persisted refresh token is rendered useless.
+C7	Token-refresh race in axios interceptor. Two parallel requests hit 401, both enter the refresh branch; whichever finishes second overwrites tokens. No mutex.	services/api.ts:29-66	Random logouts and corrupted token state.
+B2. 🟠 HIGH — correctness / data integrity
+#	Issue	Where
+H1	Analytics $lookup joins on incompatible types. transactions.wallet_id is stored as str(wallet["_id"]) while wallets._id is ObjectId → lookup returns empty. Earnings/debit totals always 0.	analytics_service.py:76-88, wallet_service.py:28
+H2	Queue token number race. count_documents(...) + 1 is not atomic; two assistants adding at once can mint duplicate tokens.	data_service.py:146-148
+H3	Prescription finalize is not idempotent. Network retry after a successful finalize raises "already finalized" instead of returning the original result; clients with retries see failure.	data_service.py:263-296
+H4	Transaction insert can succeed/fail independently of balance update. No multi-doc transaction wrapping both writes → audit log can desync from balance.	wallet_service.py:49-61
+H5	Notifications system is dead. Endpoints exist; no service ever inserts into notification_jobs.	services/notification_service.py
+H6	Transcripts not linked to prescriptions. Audio is transcribed, extraction stored, but no prescription_id on the transcript document — audit trail cannot tie the consultation to the issued Rx.	transcription_service.py:351-363
+H7	Frontend wallet deduction is optimistic with no rollback. useWalletStore sets local balance from response, but no rollback if a later step (PDF gen, finalize) fails.	store/useWalletStore.ts:34-45
+H8	Queue polling interval leaks. setInterval in useQueueStore started by screens but never cleared on unmount; can run indefinitely in background.	store/useQueueStore.ts:136-140
+H9	OTPScreen resend button has no handler. If OTP expires, user is stuck.	screens/auth/OTPScreen.tsx:99-101
+H10	RegistrationScreen clinic picker is dead code. Styles for a clinic-picker exist but the JSX was never wired; doctors cannot pick an existing clinic.	screens/auth/RegistrationScreen.tsx
+B3. 🟡 MEDIUM — security & robustness
+#	Issue	Where
+M1	No rate limiting middleware. RATE_LIMIT_* settings exist but are never read.	config/settings.py:21-22
+M2	CORS allows credentials with wildcard origins. When ALLOWED_ORIGINS is empty the list becomes *. Modern browsers reject this combo, but the intent is fragile.	main.py:27-33
+M3	GET /api/clinic/list returns every clinic to any authenticated user.	routes/clinic.py
+M4	Doctor-code reuse forever. Cannot be rotated; once leaked anyone joins the clinic.	services/connection_service.py:36-39
+M5	Assistant clinic-switch on accept. Accepting a new invite blindly overwrites clinic_id; orphans previous clinic's data.	connection_service.py:80-82
+M6	re.escape missing on custom-medicine/lab-test name regex. Names with ( ) . * break search.	data_service.py:330-344, 383-397
+M7	Fast2SMS response not checked. OTP is "sent" even on API failure.	utils/otp.py:13-23
+M8	Doctor code uses random.choices() instead of secrets.choice().	utils/hash.py:28-30
+M9	/api/transcription/analyze reads bytes into memory; no temp file. Memory pressure under load even with size cap.	transcription_service.py:306-340
+M10	Prompt injection surface in transcription extraction. Patient utterances are interpolated raw into the LLaMA prompt.	transcription_service.py:109-112
+M11	No retry/backoff for Groq calls. Single transient hiccup fails the whole consultation.	transcription_service.py:309-320
+M12	Per-medicine find_one(regex) lookup in transcription → N round-trips per analysis.	transcription_service.py:248-250
+M13	SecureStore fallback on Android API <23 is AsyncStorage (plaintext). No platform check.	services/api.ts
+M14	No certificate pinning anywhere — HTTP-over-LAN-IP in dev is fine, prod build is exposed to MITM if any network is hostile.	constants/config.ts
+M15	Patient PII (name, phone, DOB, allergies, diagnosis) stored unencrypted in on-device SQLite. Standard device backup → cleartext PHI.	database/database.ts
+M16	Negative RechargeRequest.amount is accepted. No Pydantic gt=0.	models/wallet.py
+M17	Snake-case ↔ camelCase normalization duplicated in authService, dataService, connectionService; types in src/types/ don't match the actual wire shape.	multiple
+M18	PrescriptionAutofill returned from transcription is snake_case but consumer screens expect camelCase — auto-fill of medicines/tests has silent gaps.	services/transcriptionService.ts
+B4. 🟢 LOW — quality / UX / performance
+#	Issue
+L1	Silent catch {} blocks in nearly every frontend service (dataService.ts:309, TranscriptHistoryScreen.tsx:34, etc.) — no logger, no toast.
+L2	No global ErrorBoundary; a render error in any screen blanks the app.
+L3	WalletScreen renders the transactions list via map() inside View, not FlatList.
+L4	Hardcoded paddingTop: 50/52 instead of useSafeAreaInsets() (DoctorDashboard.tsx, LoginScreen.tsx, OTPScreen.tsx).
+L5	AssistantDashboard filters the queue on every render — useMemo candidate.
+L6	MedicinePickerScreen search debounce setTimeout not cleared on unmount.
+L7	LabTestPickerScreen notes input inside FlatList renderItem — large clinic lists re-render heavily.
+L8	ConsultScreen beforeRemove discards draft without "Discard changes?" confirmation.
+L9	After recharge from PrescriptionPreviewScreen, user has to manually re-tap Sign & Issue; no resume hook.
+L10	Splash hard-coded 2s; if SQLite seed runs first time on an old device it can exceed 2s and visually flash.
+L11	Seed inserts 198 rows sequentially without a transaction → slow first run, easy to half-seed and skip on retry.
+L12	useFocusEffect loaders never expose retry — pull-to-refresh missing from PatientHistoryScreen, AnalyticsScreen.
+L13	No global offline banner — NetworkBanner exists but is not mounted in either tab navigator.
+L14	Index (wallet_id, created_at) missing on transactions — analytics scans full collection.
+L15	No TTL index on notification_jobs.
+L16	Status transitions on queue/prescription have no enum validation; any string is accepted.
+L17	Thread pool used by transcription is unbounded (default executor).
+L18	Logs may include phone numbers / OTPs (no redaction in logging.exception).
+PART C — IMPROVEMENT SUGGESTIONS (PRIORITIZED)
+Sprint 1 — Security & money correctness (do not ship without these)
+Atomic wallet ops — replace every read-then-write with a conditional $inc:
+
+res = await db.wallets.update_one(
+    {"user_id": user_id, "balance": {"$gte": amount}},
+    {"$inc": {"balance": -amount}}
+)
+if res.modified_count == 0:
+    raise ValueError("Insufficient balance")
+Wrap (balance update + transaction insert) in a Motor session transaction.
+OTP hardening — otp_attempts counter on the user doc; max 5 verify attempts per code; per-phone rate limit (e.g. 5 OTP requests / hour). Default OTP_DEMO_MODE=False. Validate Fast2SMS response.
+Transcription upload guard — read Content-Length; reject > 25 MB; stream to a tempfile.NamedTemporaryFile; pass the path to Groq; finally: os.unlink(path).
+Move admin seed credentials to .env and skip entirely when NODE_ENV=production.
+Rate limiting middleware — slowapi or hand-rolled Redis token bucket; wire RATE_LIMIT_* settings.
+Tighten CORS — refuse to start when origins is * and credentials are allowed.
+Token-refresh mutex on the client — single in-flight refresh promise shared by all 401-victims:
+
+let refreshing: Promise<void> | null = null;
+...
+refreshing = refreshing ?? doRefresh();
+await refreshing;
+refreshing = null;
+Call restoreSession() before mounting RootNavigator in App.tsx.
+Sprint 2 — Data integrity
+Fix analytics $lookup — store transactions.wallet_id as ObjectId (and migrate existing rows), or $convert in the pipeline.
+Queue tokens via counter collection — findOneAndUpdate({clinic_id, date}, {$inc: {seq:1}}, upsert=true).
+Idempotent finalize — if status == "finalized", return success with the existing payload instead of erroring.
+Link transcripts — add prescription_id and queue_item_id columns to transcripts.
+Wallet rollback on prescription failure — on PDF/finalize error, call a credit-back API; UI shows a "Refunded ₹1" toast.
+Server-validated balance check — frontend canAfford is hint-only; the atomic $inc is the source of truth.
+Sprint 3 — UX & robustness
+Resend OTP — countdown timer; reuse sendOtp from authService.
+RegistrationScreen — wire the orphaned clinic-picker JSX or remove the styles; add regNumber format validation if your jurisdiction has one.
+Mount NetworkBanner once in RootNavigator; surface "no connection — will retry" with auto-retry queue.
+ConsultScreen discard guard — Alert.alert("Discard changes?", …) in beforeRemove.
+PrescriptionPreviewScreen recharge return path — listen to wallet balance change and toast "Balance updated — tap Sign & Issue".
+Clear setInterval in queue/heartbeat stores on unmount; expose explicit start()/stop() with refcounting.
+Replace paddingTop: 50 with useSafeAreaInsets() across all screens.
+Centralize snake_case ↔ camelCase: one util, used by every service; validate runtime with zod.
+Surface error states from stores — every store gets error: string | null and clearError(); screens render a banner instead of swallowing.
+Replace logo base64 in SecureStore with file-system storage (SecureStore has a 2 KB value limit on Android in some versions).
+Sprint 4 — Performance & ops
+Batch transcription lookups — fetch all clinic medicines once, build a Map<lowerName, doc> in-memory.
+Bounded thread pool for Groq blocking calls — ThreadPoolExecutor(max_workers=8).
+Add indexes: transactions(wallet_id, created_at), prescriptions(clinic_id, patient_id, created_at), TTL on notification_jobs.created_at (30 days).
+Seed in a single transaction: db.execAsync('BEGIN; ... ; COMMIT;') — 10× faster cold start.
+Streaming SHA-256 for PDFs (cryptoService.ts) — current code reads the whole base64 into memory.
+useMemo the filtered queue in AssistantDashboard; convert transactions list to FlatList.
+Sentry / Crashlytics + structured backend logging with phone-number redaction.
+Sprint 5 — Architecture (longer term)
+HIPAA-grade local storage: switch from expo-sqlite to expo-sqlite-encrypted (SQLCipher) with a key derived from the user's PIN + SecureStore.
+TLS pinning in production builds via react-native-ssl-pinning or the new expo-network cert pinning.
+Server-driven prescription numbering + signed PDF (server-side render + signature) so the device cannot generate phantom prescriptions.
+Producer-side notifications — emit notification_jobs rows on: queue add, prescription finalize, low wallet balance. Wire a worker that pushes via FCM/APNs.
+Schema migrations — proper versioned migration steps in database.ts instead of user_version ladder; integration tests for upgrade paths.
+API contract test — generate TypeScript types from FastAPI's OpenAPI (openapi-typescript) so the snake_case/camelCase drift dies.
+Doctor-code rotation endpoint.
+Soft-leave for assistants — disconnect keeps historical data attached to clinic but flags the assistant as inactive.
+PDF cloud archive — upload signed PDFs to S3/Cloudflare R2 + store URL on the prescription doc; survives device uninstall.
+PART D — DOCUMENTATION DRIFT (low effort, high signal)
+QUICK_START.md still describes an Express.js + PostgreSQL/Supabase stack ("cd backend && npm install", "Express.js Backend API", "PostgreSQL (Supabase)") — the project moved to FastAPI + Mongo (commit 796daa1). Update or delete.
+README.md is accurate to the current Python stack — keep this as the source of truth.
+medical_transcriber.py at the repo root is a standalone utility not referenced from the backend; either document it or remove.
+TL;DR
+The app is well-architected and most flows work. The dangerous holes are concentrated in five places:
+
+Wallet math is not atomic — both backend race conditions and frontend optimistic updates.
+OTP auth has no brute-force protection and ships in demo mode by default.
+Transcription upload has no size cap and the Groq pipeline has no retries/limits.
+Auth session handling on the client — restoreSession never runs, and the refresh interceptor races itself.
+Analytics $lookup joins ObjectId↔string so financial dashboards silently show zeros.
+Fixing those five items closes ~80 % of the real risk. The rest of the list is hardening, UX polish, and documentation cleanup.
+
+Update Todos
+
+Audit backend (FastAPI) — routes, services, models, auth, transcription
+
+Audit frontend services, stores, API layer, SQLite database
+
+Audit frontend screens (auth, doctor, assistant, shared) and navigation
+
+Compile final consolidated audit report with issues + improvements
+Audit complete. Report covers what works (per subsystem), every bug/security/UX issue with file:line references, and a 5-sprint prioritized improvement plan. The five highest-impact fixes are listed in the TL;DR — start there.

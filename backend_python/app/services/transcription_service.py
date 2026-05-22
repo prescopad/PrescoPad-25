@@ -19,7 +19,7 @@ from app.models.common import serialize_doc
 
 log = logging.getLogger(__name__)
 
-WHISPER_MODEL = "whisper-large-v3-turbo"
+WHISPER_MODEL = "whisper-large-v3"
 LLAMA_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 

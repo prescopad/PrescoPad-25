@@ -13,7 +13,10 @@
       "backgroundColor": "#0077B6"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "PrescoPad needs microphone access to record consultations for transcription."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +24,8 @@
         "backgroundColor": "#0077B6"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.prescopad.app"
+      "package": "com.prescopad.app",
+      "permissions": ["RECORD_AUDIO"]
     },
     "plugins": [
       "expo-sqlite",
