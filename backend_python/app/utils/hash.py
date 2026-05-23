@@ -1,4 +1,4 @@
-import random
+import secrets
 import string
 import bcrypt
 
@@ -27,8 +27,8 @@ def verify_otp(plain: str, hashed: str) -> bool:
 
 def generate_doctor_code(length: int = 6) -> str:
     chars = string.ascii_uppercase + string.digits
-    return "".join(random.choices(chars, k=length))
+    return "".join(secrets.choice(chars) for _ in range(length))
 
 
 def generate_otp(length: int = 6) -> str:
-    return "".join(random.choices(string.digits, k=length))
+    return "".join(secrets.choice(string.digits) for _ in range(length))

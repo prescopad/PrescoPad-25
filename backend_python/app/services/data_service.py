@@ -143,9 +143,15 @@ async def add_to_queue(clinic_id: str, user_id: str, patient_id: str, notes: str
     if not patient:
         raise ValueError("Patient not found in this clinic")
 
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    count = await db.queue.count_documents({"clinic_id": clinic_id, "added_at": {"$gte": today_start}})
-    token_number = count + 1
+    # Atomic per-clinic-per-day counter — no race condition.
+    today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    counter = await db.counters.find_one_and_update(
+        {"_id": f"queue_token:{clinic_id}:{today_key}"},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True,
+    )
+    token_number = counter["seq"]
 
     doc = {
         "clinic_id": clinic_id,
@@ -261,39 +267,78 @@ async def create_prescription(clinic_id: str, doctor_id: str, data: dict) -> dic
 
 
 async def finalize_prescription(clinic_id: str, doctor_id: str, prescription_id: str) -> dict:
+    """Finalize a prescription and atomically deduct the prescription fee.
+
+    Idempotent: if the prescription is already finalized, returns it as-is.
+    """
+    from app.config.settings import settings
+    from app.services import wallet_service
+
     db = get_db()
     rx = await db.prescriptions.find_one({"_id": prescription_id, "clinic_id": clinic_id})
     if not rx:
         raise ValueError("Prescription not found")
-    if rx.get("status") != "draft":
-        raise ValueError("Prescription already finalized")
 
-    fee = 1.0
-    wallet = await db.wallets.find_one({"user_id": doctor_id})
-    if not wallet or wallet["balance"] < fee:
-        raise ValueError("Insufficient wallet balance. Please recharge to issue a prescription.")
+    # Idempotency — a retry after a successful finalize must succeed.
+    if rx.get("status") == "finalized":
+        return serialize_doc(rx)
 
-    new_balance = wallet["balance"] - fee
-    await db.wallets.update_one(
-        {"user_id": doctor_id},
-        {"$set": {"balance": new_balance, "updated_at": datetime.now(timezone.utc)}}
+    fee = float(settings.PRESCRIPTION_FEE)
+
+    # Atomic deduction with idempotency key tied to this prescription.
+    try:
+        await wallet_service.deduct(
+            user_id=doctor_id,
+            amount=fee,
+            description=f"Prescription fee for {prescription_id}",
+            reference_id=prescription_id,
+            idempotency_key=f"rx_fee:{prescription_id}",
+        )
+    except ValueError as e:
+        # Surface as a 400 to the route layer.
+        raise ValueError(
+            "Insufficient wallet balance. Please recharge to issue a prescription."
+        ) from e
+
+    # Mark finalized only if still draft — protects against a parallel finalize.
+    update_result = await db.prescriptions.update_one(
+        {"_id": prescription_id, "status": "draft"},
+        {"$set": {
+            "status": "finalized",
+            "wallet_deducted": fee,
+            "finalized_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }}
     )
-    await db.transactions.insert_one({
-        "wallet_id": str(wallet["_id"]),
-        "type": "debit",
-        "amount": fee,
-        "description": f"Prescription fee for {prescription_id}",
-        "reference_id": prescription_id,
-        "created_at": datetime.now(timezone.utc),
-    })
-    wallet_deducted = fee
+    if update_result.modified_count == 0:
+        # Someone else finalized between our read and write — refund our debit.
+        await wallet_service.refund(
+            user_id=doctor_id,
+            amount=fee,
+            reference_id=prescription_id,
+            description=f"Refund: duplicate finalize for {prescription_id}",
+        )
 
-    await db.prescriptions.update_one(
-        {"_id": prescription_id},
-        {"$set": {"status": "finalized", "wallet_deducted": wallet_deducted, "updated_at": datetime.now(timezone.utc)}}
-    )
     rx = await db.prescriptions.find_one({"_id": prescription_id})
     return serialize_doc(rx)
+
+
+async def link_transcript_to_prescription(
+    clinic_id: str, prescription_id: str, transcript_id: str, queue_item_id: str = None
+):
+    """Attach a transcript reference to a prescription so the audit trail
+    survives even after the consultation ends."""
+    db = get_db()
+    update = {
+        "transcript_id": transcript_id,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if queue_item_id:
+        update["queue_item_id"] = queue_item_id
+    await db.prescriptions.update_one(
+        {"_id": prescription_id, "clinic_id": clinic_id},
+        {"$set": update},
+    )
 
 
 # ─── Custom Medicines ─────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ function normalizeUser(u: Record<string, unknown>): User {
     clinicId: (u.clinic_id ?? u.clinicId ?? '') as string,
     doctorCode: (u.doctor_code ?? u.doctorCode ?? undefined) as string | undefined,
     isProfileComplete: Boolean(u.is_profile_complete ?? u.isProfileComplete ?? false),
+    soloMode: Boolean(u.solo_mode ?? u.soloMode ?? false),
     createdAt: (u.created_at ?? u.createdAt ?? '') as string,
   };
 }

@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
 class RechargeRequest(BaseModel):
-    amount: float
+    amount: float = Field(..., gt=0, le=100_000, description="Recharge amount; must be positive")
     reference_id: Optional[str] = None
     referenceId: Optional[str] = None
 
@@ -12,7 +12,7 @@ class RechargeRequest(BaseModel):
 
 
 class DeductRequest(BaseModel):
-    amount: float
+    amount: float = Field(..., gt=0)
     description: str
     reference_id: Optional[str] = None
     referenceId: Optional[str] = None
@@ -25,10 +25,10 @@ class AutoRefillRequest(BaseModel):
     # Accept both camelCase and snake_case
     auto_refill: Optional[bool] = None
     autoRefill: Optional[bool] = None
-    auto_refill_amount: Optional[float] = None
-    autoRefillAmount: Optional[float] = None
-    auto_refill_threshold: Optional[float] = None
-    autoRefillThreshold: Optional[float] = None
+    auto_refill_amount: Optional[float] = Field(default=None, ge=0)
+    autoRefillAmount: Optional[float] = Field(default=None, ge=0)
+    auto_refill_threshold: Optional[float] = Field(default=None, ge=0)
+    autoRefillThreshold: Optional[float] = Field(default=None, ge=0)
 
     def get_auto_refill(self) -> bool:
         v = self.auto_refill if self.auto_refill is not None else self.autoRefill

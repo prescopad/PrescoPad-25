@@ -5,19 +5,19 @@ from datetime import datetime
 
 class SendOtpRequest(BaseModel):
     phone: str
-    role: Literal["doctor", "assistant"]
+    role: Literal["doctor", "assistant", "admin"]
 
 
 class VerifyOtpRequest(BaseModel):
     phone: str
     otp: str
-    role: Literal["doctor", "assistant"]
+    role: Literal["doctor", "assistant", "admin"]
 
 
 class LoginRequest(BaseModel):
     phone: str
     password: str
-    role: Literal["doctor", "assistant"]
+    role: Literal["doctor", "assistant", "admin"]
 
 
 class RefreshTokenRequest(BaseModel):

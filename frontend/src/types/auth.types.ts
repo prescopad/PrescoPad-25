@@ -1,6 +1,7 @@
 export enum UserRole {
   DOCTOR = 'doctor',
   ASSISTANT = 'assistant',
+  ADMIN = 'admin',
 }
 
 export interface User {
@@ -11,6 +12,9 @@ export interface User {
   clinicId: string;
   doctorCode?: string;
   isProfileComplete: boolean;
+  /** True when this user's clinic has no assistants — the doctor gains
+   * AddPatient / PatientSearch / queue management capabilities. */
+  soloMode?: boolean;
   createdAt: string;
 }
 

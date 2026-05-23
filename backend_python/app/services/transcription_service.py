@@ -1,14 +1,21 @@
 """
 Medical Transcription Service
-Receives audio bytes → Groq Whisper transcription → LLaMA speaker diarization
-→ LLaMA medical extraction → returns structured prescription data + transcript
+Audio file → Groq Whisper transcription → LLaMA speaker diarization
+→ LLaMA medical extraction → returns structured prescription data + transcript.
+
+The extraction prompt is deliberately conservative — when the doctor doesn't
+mention a field (diagnosis, advice, follow-up, medicines, lab tests) the model
+must return null / empty list. We never invent data.
 """
 import asyncio
 import json
 import logging
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
+from typing import Optional
 
 from bson import ObjectId
 from groq import Groq
@@ -20,25 +27,44 @@ from app.models.common import serialize_doc
 log = logging.getLogger(__name__)
 
 WHISPER_MODEL = "whisper-large-v3"
-LLAMA_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"
+LLAMA_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+# Bounded executor — never spawn more than 8 blocking Groq calls simultaneously.
+_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="groq")
 
 
 def _groq_client() -> Groq:
     if not settings.GROQ_API_KEY:
-        raise ValueError("GROQ_API_KEY not configured")
+        raise ValueError("Transcription is not configured on this server")
     return Groq(api_key=settings.GROQ_API_KEY)
+
+
+def _retry_sync(fn, *, attempts: int = 3, base_delay: float = 1.0):
+    last_err: Optional[Exception] = None
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:
+            last_err = e
+            if i == attempts - 1:
+                break
+            time.sleep(base_delay * (2 ** i))
+    if last_err:
+        raise last_err
 
 
 # ── Step 1: Transcribe ────────────────────────────────────────────────────────
 
-def _transcribe_sync(audio_bytes: bytes, filename: str):
+def _transcribe_sync(file_path: str, filename: str):
     client = _groq_client()
-    return client.audio.transcriptions.create(
+    with open(file_path, "rb") as f:
+        audio_bytes = f.read()
+    return _retry_sync(lambda: client.audio.transcriptions.create(
         file=(filename, audio_bytes),
         model=WHISPER_MODEL,
         temperature=0,
         response_format="verbose_json",
-    )
+    ))
 
 
 # ── Step 2: Diarize speakers ──────────────────────────────────────────────────
@@ -69,12 +95,12 @@ Segments:
 
 Return ONLY a JSON array, no explanation, no markdown:"""
 
-    completion = client.chat.completions.create(
+    completion = _retry_sync(lambda: client.chat.completions.create(
         model=LLAMA_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
         max_completion_tokens=2048,
-    )
+    ))
     raw = completion.choices[0].message.content.strip()
     raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
 
@@ -103,141 +129,101 @@ def _extract_medical_info_sync(diarized: list) -> dict:
         return {}
 
     client = _groq_client()
-    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")  # e.g. 2026-05-17
-    today_display = datetime.now(timezone.utc).strftime("%d %B %Y")  # e.g. 17 May 2026
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_display = datetime.now(timezone.utc).strftime("%d %B %Y")
 
     conversation = "\n".join(
         f"{seg['speaker']} ({seg['start']}s): {seg['text']}"
         for seg in diarized
     )
 
-    prompt = f"""You are an expert medical AI assistant embedded in an Indian clinic management system.
-Your job is to deeply analyze a doctor-patient consultation transcript and extract structured prescription data.
+    prompt = f"""You are a medical AI assistant in an Indian clinic. Extract structured prescription data from a doctor-patient consultation transcript.
 
 TODAY'S DATE: {today_str} ({today_display})
 
-=== CRITICAL RULES — READ CAREFULLY ===
+=== EXTREMELY IMPORTANT RULES ===
 
-1. INFER, DON'T JUST MATCH KEYWORDS
-   - Doctors and patients speak naturally and informally. They will NOT say "I prescribe" or "my advice is".
-   - Use the full context of the conversation to infer what was said.
-   - Example: Doctor says "Take rest for a week, drink lots of fluids, avoid cold food" → advice = "Take rest for a week, drink plenty of fluids, avoid cold food"
-   - Example: Doctor says "I'll give you a paracetamol for the fever" → extract Paracetamol as a medicine
-   - Example: Patient says "my stomach hurts since 2 days" → symptom = abdominal pain / stomach ache
+ZERO HALLUCINATION:
+- You MUST NOT invent any information that is not clearly present (explicitly or strongly implicitly) in the transcript.
+- If the doctor did NOT mention a diagnosis → diagnosis = null. Do not guess.
+- If the doctor did NOT mention any advice → advice = null. Do not synthesize one.
+- If the doctor did NOT mention a follow-up date → follow_up_date = null.
+- If no medicines were discussed → prescribed_medicines = [].
+- If no lab tests were ordered → lab_tests = [].
+- Empty values are correct. Empty values are the safe answer.
 
-2. DATE CALCULATION — ALWAYS CALCULATE FROM TODAY ({today_str})
-   - "come after 3 days" → add 3 days to today → output that exact YYYY-MM-DD date
-   - "come next week" → add 7 days to today
-   - "come after 2 weeks" → add 14 days to today
-   - "come next Monday" → calculate the actual date of next Monday from today
-   - "come after a month" → add 30 days to today
-   - "see me on the 20th" → use the 20th of current month (or next month if already past)
-   - NEVER output "after 3 days" as the date. ALWAYS convert to YYYY-MM-DD format.
-   - If no follow-up is mentioned at all → null
+REASONABLE INFERENCE (only when grounded in actual conversation):
+- "Take rest for a week, drink lots of fluids" → advice captures both.
+- "I'll give you a paracetamol for fever" → medicine = Paracetamol.
+- "come after 3 days" → follow_up_date = today + 3 days, in YYYY-MM-DD format.
+- "twice a day" → frequency = "1-0-1". "TDS" → "1-1-1". "OD" → "1-0-0". "At night" → "0-0-1". "SOS" → "As needed".
+- Hinglish: "do din mein aana" = come in 2 days, "khana khane ke baad" = after food.
 
-3. MEDICINE EXTRACTION — BE THOROUGH
-   - Extract medicines even when mentioned casually: "let me write you an antibiotic", "I'll prescribe a vitamin supplement"
-   - Infer medicine type from name if not stated (e.g. Amoxicillin → Capsule, Cough syrup → Syrup, eye drops → Drops)
-   - Frequency patterns:
-     * "once a day" / "OD" → "1-0-0"
-     * "twice a day" / "BD" → "1-0-1"
-     * "three times a day" / "TDS" → "1-1-1"
-     * "morning and night" → "1-0-1"
-     * "every 8 hours" → "1-1-1"
-     * "at night" / "at bedtime" → "0-0-1"
-     * "SOS" / "as needed" → "As needed"
-   - Duration: "5 din" = "5 days", "ek hafta" = "1 week", "do hafte" = "2 weeks"
-   - Timing: infer from context — "after meals" → "After food", "on empty stomach" → "Empty stomach", "before sleeping" → "At bedtime"
-
-4. DIAGNOSIS — INFER FROM SYMPTOMS AND DOCTOR STATEMENTS
-   - If doctor explicitly names a diagnosis → use it
-   - If not explicitly named, infer from the symptoms and treatment discussed
-   - Example: Patient says "fever, body ache, cold" and doctor prescribes paracetamol + antibiotic → diagnosis = "Viral fever with upper respiratory tract infection"
-   - Example: Doctor says "looks like you have a stomach infection" → diagnosis = "Gastroenteritis"
-
-5. ADVICE — CAPTURE ALL LIFESTYLE AND CARE INSTRUCTIONS
-   - Everything the doctor tells the patient to do or avoid: rest, diet, fluids, activity restrictions
-   - Example: "avoid spicy food, drink warm water, rest at home for 2 days" → full advice string
-   - Include warnings: "if fever doesn't come down in 2 days, come back immediately"
-
-6. LAB TESTS — ANY TEST THE DOCTOR ORDERS OR SUGGESTS
-   - "get a CBC done" → Complete Blood Count (Blood)
-   - "do a urine test" → Urine Routine (Urine)
-   - "get an X-ray of the chest" → Chest X-Ray (Imaging)
-   - "let's do a blood sugar" → Blood Glucose (Blood)
-   - "get an ultrasound of the abdomen" → Abdominal Ultrasound (Imaging)
-
-7. HINGLISH / MIXED LANGUAGE
-   - This is an Indian clinic. Doctors and patients may mix Hindi and English freely.
-   - "bukhar" = fever, "khana khane ke baad" = after food, "subah shaam" = morning and evening
-   - "do din mein aana" = come in 2 days, "aaram karo" = take rest, "paani piyo" = drink water
+NEVER fabricate a follow-up date when none was discussed. NEVER copy "today" as the follow-up date unless the doctor explicitly said "tomorrow" / "today".
 
 === OUTPUT FORMAT ===
-Return ONLY valid JSON, no markdown, no explanation, no extra text:
+Return ONLY valid JSON, no markdown, no explanation:
 
 {{
-  "chief_complaint": "primary reason for visit inferred from conversation, or null",
-  "diagnosis": "primary diagnosis — inferred if not explicitly stated, or null",
-  "symptoms": ["all symptoms mentioned or implied"],
-  "advice": "complete doctor advice as a single readable string covering all instructions given, or null",
-  "follow_up_date": "YYYY-MM-DD calculated from today ({today_str}) based on what doctor said, or null",
+  "chief_complaint": "primary reason for visit, or null if not stated",
+  "diagnosis": "primary diagnosis, or null if doctor did not name one",
+  "symptoms": ["all symptoms explicitly mentioned"],
+  "advice": "complete doctor advice as a single string, or null if no advice was given",
+  "follow_up_date": "YYYY-MM-DD computed from today ({today_str}), or null if not mentioned",
   "prescribed_medicines": [
     {{
-      "medicine_name": "medicine name",
-      "type": "Tablet or Capsule or Syrup or Injection or Drops or Cream or Ointment or Inhaler or Powder or Gel or Patch or Suppository or Other",
-      "dosage": "dosage strength e.g. 500mg, or empty string if not mentioned",
-      "frequency": "frequency in 1-0-1 format or plain text e.g. twice daily, or empty string",
+      "medicine_name": "exact name as spoken",
+      "type": "Tablet | Capsule | Syrup | Injection | Drops | Cream | Ointment | Inhaler | Powder | Gel | Patch | Suppository | Other",
+      "dosage": "strength e.g. 500mg, or empty string if not mentioned",
+      "frequency": "frequency in 1-0-1 form or natural language, or empty string",
       "duration": "e.g. 5 days, 1 week, or empty string",
-      "timing": "Before food or After food or With food or Empty stomach or At bedtime or As needed, or empty string",
-      "notes": "any special instructions, or empty string"
+      "timing": "Before food | After food | With food | Empty stomach | At bedtime | As needed | empty string",
+      "notes": "special instructions, or empty string"
     }}
   ],
   "lab_tests": [
     {{
       "test_name": "full test name",
-      "category": "Blood or Urine or Stool or Imaging or Microbiology or Cardiology or Pulmonary or Neurology or Pathology or Allergy or Other",
-      "notes": "any instructions e.g. fasting required, or empty string"
+      "category": "Blood | Urine | Stool | Imaging | Microbiology | Cardiology | Pulmonary | Neurology | Pathology | Allergy | Other",
+      "notes": "instructions e.g. fasting required, or empty string"
     }}
   ]
 }}
 
-=== CONSULTATION TRANSCRIPT ===
+=== CONSULTATION TRANSCRIPT (BEGIN) ===
 {conversation}
+=== CONSULTATION TRANSCRIPT (END) ===
 
-Remember: TODAY = {today_str}. Calculate all relative dates from this. Think step by step before outputting."""
+Reminder: Empty values are correct when the information was not discussed. Today is {today_str}. Return JSON only."""
 
-    completion = client.chat.completions.create(
+    completion = _retry_sync(lambda: client.chat.completions.create(
         model=LLAMA_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.15,
+        temperature=0.05,
         max_completion_tokens=4000,
-    )
+    ))
     raw = completion.choices[0].message.content.strip()
     raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
 
     try:
         result = json.loads(raw)
-        log.info("Extraction result — diagnosis: %s | advice: %s | follow_up: %s | medicines: %d | lab_tests: %d",
-                 result.get("diagnosis") or result.get("chief_complaint"),
-                 result.get("advice"),
-                 result.get("follow_up_date"),
-                 len(result.get("prescribed_medicines") or []),
-                 len(result.get("lab_tests") or []))
+        log.info(
+            "Extraction — diagnosis=%s advice_set=%s follow_up=%s meds=%d tests=%d",
+            bool(result.get("diagnosis")),
+            bool(result.get("advice")),
+            result.get("follow_up_date"),
+            len(result.get("prescribed_medicines") or []),
+            len(result.get("lab_tests") or []),
+        )
         return result
     except json.JSONDecodeError:
         log.warning("Medical extraction JSON parse failed, raw: %s", raw[:200])
-        return {"error": "Could not parse extraction", "raw": raw}
+        return {}
 
 
 # ── Step 4: Auto-register new medicines / lab tests into clinic database ──────
 
 async def _auto_register_items(clinic_id: str, medicines: list, lab_tests: list):
-    """
-    For each AI-extracted medicine/lab test, upsert into the clinic's custom database:
-    - If the name doesn't exist yet → insert with usage_count=1
-    - If it already exists → increment usage_count
-    Failures are silently swallowed so they never affect the transcription response.
-    """
     db = get_db()
 
     for m in medicines:
@@ -296,20 +282,20 @@ async def _auto_register_items(clinic_id: str, medicines: list, lab_tests: list)
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
-async def process_audio(
-    audio_bytes: bytes,
+async def process_audio_file(
+    file_path: str,
     filename: str,
     doctor_id: str,
     patient_id: str,
     clinic_id: str,
+    prescription_id: Optional[str] = None,
+    queue_item_id: Optional[str] = None,
 ) -> dict:
     loop = asyncio.get_event_loop()
 
-    # Run all blocking Groq SDK calls in a thread pool so they don't block the event loop
     try:
-        log.info("Transcribing audio: %s bytes, file=%s", len(audio_bytes), filename)
         transcription = await loop.run_in_executor(
-            None, partial(_transcribe_sync, audio_bytes, filename)
+            _executor, partial(_transcribe_sync, file_path, filename)
         )
     except Exception as e:
         log.exception("Whisper transcription failed")
@@ -319,7 +305,6 @@ async def process_audio(
     full_text = getattr(transcription, "text", "") or ""
     log.info("Transcription done: %d segments, %d chars", len(segments), len(full_text))
 
-    # If no segments but we have text, create a single segment from full text
     if not segments and full_text:
         class _Seg:
             start = 0.0
@@ -328,31 +313,32 @@ async def process_audio(
         segments = [_Seg()]
 
     try:
-        diarized = await loop.run_in_executor(None, partial(_diarize_sync, segments))
+        diarized = await loop.run_in_executor(_executor, partial(_diarize_sync, segments))
     except Exception as e:
         log.warning("Diarization failed, continuing without it: %s", e)
         diarized = [{"start": 0.0, "end": 0.0, "speaker": "Unknown", "text": full_text}] if full_text else []
 
     try:
-        extraction = await loop.run_in_executor(None, partial(_extract_medical_info_sync, diarized))
+        extraction = await loop.run_in_executor(_executor, partial(_extract_medical_info_sync, diarized))
     except Exception as e:
         log.warning("Medical extraction failed, continuing without it: %s", e)
         extraction = {}
 
-    # Duration from last segment end, or 0
     audio_duration = round(diarized[-1]["end"], 1) if diarized and diarized[-1].get("end") else 0
 
-    # Auto-register any new medicines / lab tests into the clinic's database
     prescribed_medicines = extraction.get("prescribed_medicines") or []
     lab_tests_raw = extraction.get("lab_tests") or []
     await _auto_register_items(clinic_id, prescribed_medicines, lab_tests_raw)
 
-    # Persist transcript to MongoDB
+    # Persist transcript with optional prescription / queue linkage so the
+    # audit trail can tie a consultation to its prescription.
     db = get_db()
     doc = {
         "doctor_id": doctor_id,
         "patient_id": patient_id,
         "clinic_id": clinic_id,
+        "prescription_id": prescription_id,
+        "queue_item_id": queue_item_id,
         "full_transcript": full_text,
         "diarized_transcript": diarized,
         "medical_extraction": extraction,
@@ -363,12 +349,23 @@ async def process_audio(
     transcript_id = str(result.inserted_id)
     log.info("Transcript saved: %s", transcript_id)
 
+    # Best-effort backlink on the prescription side.
+    if prescription_id:
+        try:
+            await db.prescriptions.update_one(
+                {"_id": prescription_id, "clinic_id": clinic_id},
+                {"$set": {"transcript_id": transcript_id, "updated_at": datetime.now(timezone.utc)}},
+            )
+        except Exception:
+            log.warning("Failed to backlink transcript %s → prescription %s", transcript_id, prescription_id)
+
+    # Note: empty strings/null in autofill are intentional — UI keeps fields empty.
     return {
         "transcript_id": transcript_id,
         "full_transcript": full_text,
         "diarized_transcript": diarized,
         "prescription_autofill": {
-            "diagnosis": extraction.get("diagnosis") or extraction.get("chief_complaint") or "",
+            "diagnosis": extraction.get("diagnosis") or "",
             "advice": extraction.get("advice") or "",
             "follow_up_date": extraction.get("follow_up_date") or "",
             "medicines": [

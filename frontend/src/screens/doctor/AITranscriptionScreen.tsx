@@ -198,6 +198,22 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       setTranscript(result.diarized_transcript);
       setAutofill(result.prescription_autofill);
       setRecordingState('done');
+
+      // Tell the doctor exactly what the AI extracted vs left empty so they
+      // know which fields they still need to fill in manually.
+      const a = result.prescription_autofill;
+      const filled: string[] = [];
+      const empty: string[] = [];
+      (a.diagnosis ? filled : empty).push('Diagnosis');
+      (a.advice ? filled : empty).push('Advice');
+      (a.follow_up_date ? filled : empty).push('Follow-up date');
+      (a.medicines.length ? filled : empty).push(`Medicines (${a.medicines.length})`);
+      (a.lab_tests.length ? filled : empty).push(`Lab tests (${a.lab_tests.length})`);
+      Alert.alert(
+        'AI extraction complete',
+        `Extracted: ${filled.length ? filled.join(', ') : 'nothing'}\n` +
+        `Left empty (you'll fill manually): ${empty.length ? empty.join(', ') : 'nothing'}`,
+      );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Processing failed';
       setError(msg);

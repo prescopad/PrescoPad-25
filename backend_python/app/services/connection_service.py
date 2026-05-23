@@ -81,6 +81,14 @@ async def accept_request(request_id: str, user_id: str, role: str) -> dict:
         {"_id": ObjectId(req["assistant_id"])},
         {"$set": {"clinic_id": req.get("clinic_id"), "updated_at": datetime.now(timezone.utc)}}
     )
+
+    # Clinic now has at least one assistant → solo_mode off.
+    if req.get("clinic_id"):
+        await db.clinics.update_one(
+            {"_id": ObjectId(req["clinic_id"])},
+            {"$set": {"solo_mode": False, "updated_at": datetime.now(timezone.utc)}},
+        )
+
     req = await db.connection_requests.find_one({"_id": ObjectId(request_id)})
     return serialize_doc(req)
 
@@ -179,3 +187,14 @@ async def disconnect_assistant(doctor_id: str, clinic_id: str, assistant_id: str
         {"doctor_id": doctor_id, "assistant_id": assistant_id},
         {"$set": {"status": "rejected", "updated_at": datetime.now(timezone.utc)}}
     )
+
+    # If no assistants remain, flip the clinic back to solo_mode so the doctor
+    # regains AddPatient / PatientSearch capability.
+    remaining = await db.users.count_documents({
+        "clinic_id": clinic_id, "role": "assistant", "is_active": True,
+    })
+    if remaining == 0:
+        await db.clinics.update_one(
+            {"_id": ObjectId(clinic_id)},
+            {"$set": {"solo_mode": True, "updated_at": datetime.now(timezone.utc)}},
+        )

@@ -1,4 +1,15 @@
-from datetime import datetime, timezone, timedelta
+"""Per-clinic analytics aggregation.
+
+Wallet transactions are joined to the clinic by:
+  transactions.user_id -> users._id -> users.clinic_id
+
+The previous version joined on transactions.wallet_id (string) to wallets._id
+(ObjectId), which always returned empty. Now we filter transactions by the
+doctors of the clinic (their user_ids), which is robust to type and works for
+both old and new transactions.
+"""
+from datetime import datetime, timedelta, timezone
+
 from app.config.database import get_db
 
 
@@ -47,7 +58,7 @@ async def get_analytics(clinic_id: str, period: str = "today") -> dict:
     rx_revenue = 0.0
     async for row in db.prescriptions.aggregate(rx_pipeline):
         rx_total += row["count"]
-        rx_revenue += row.get("revenue", 0.0)
+        rx_revenue += row.get("revenue", 0.0) or 0.0
         if row["_id"] == "finalized":
             rx_finalized = row["count"]
         elif row["_id"] == "draft":
@@ -72,29 +83,27 @@ async def get_analytics(clinic_id: str, period: str = "today") -> dict:
         elif row["_id"] == "cancelled":
             q_cancelled = row["count"]
 
-    # Wallet earnings for the period
-    tx_pipeline = [
-        {"$lookup": {
-            "from": "wallets",
-            "localField": "wallet_id",
-            "foreignField": "_id",
-            "as": "wallet_info",
-        }},
-        {"$match": {"created_at": {"$gte": start, "$lte": end}}},
-        {"$group": {
-            "_id": "$type",
-            "total": {"$sum": "$amount"},
-        }}
-    ]
+    # Wallet earnings — scope by clinic's doctor user_ids.
+    doctor_ids = [str(u["_id"]) async for u in db.users.find(
+        {"clinic_id": clinic_id, "role": {"$in": ["doctor", "admin"]}}, {"_id": 1}
+    )]
     total_debit = 0.0
     total_credit = 0.0
-    async for row in db.transactions.aggregate(tx_pipeline):
-        if row["_id"] == "debit":
-            total_debit = row["total"]
-        elif row["_id"] == "credit":
-            total_credit = row["total"]
+    if doctor_ids:
+        tx_pipeline = [
+            {"$match": {
+                "user_id": {"$in": doctor_ids},
+                "created_at": {"$gte": start, "$lte": end},
+            }},
+            {"$group": {"_id": "$type", "total": {"$sum": "$amount"}}},
+        ]
+        async for row in db.transactions.aggregate(tx_pipeline):
+            if row["_id"] == "debit":
+                total_debit = row["total"]
+            elif row["_id"] == "credit":
+                total_credit = row["total"]
 
-    # Popular medicines from prescriptions
+    # Popular medicines
     med_pipeline = [
         {"$match": {
             "clinic_id": clinic_id,
@@ -111,7 +120,7 @@ async def get_analytics(clinic_id: str, period: str = "today") -> dict:
         if row["_id"]:
             top_medicines.append({"name": row["_id"], "count": row["count"]})
 
-    # Popular lab tests from prescriptions
+    # Popular lab tests
     test_pipeline = [
         {"$match": {
             "clinic_id": clinic_id,

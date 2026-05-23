@@ -1,7 +1,9 @@
-from fastapi import Request, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.utils.jwt import verify_access_token
 from typing import Optional
+
+from fastapi import Request, HTTPException
+from fastapi.security import HTTPBearer
+
+from app.utils.jwt import verify_access_token
 
 security = HTTPBearer(auto_error=False)
 
@@ -34,13 +36,30 @@ async def get_current_user(request: Request) -> TokenData:
 
 async def require_doctor(request: Request) -> TokenData:
     user = await get_current_user(request)
-    if user.role != "doctor":
+    # Admins are allowed to use doctor-only endpoints for support/debugging.
+    if user.role not in ("doctor", "admin"):
         raise HTTPException(status_code=403, detail="Doctor access required")
     return user
 
 
 async def require_assistant(request: Request) -> TokenData:
     user = await get_current_user(request)
-    if user.role != "assistant":
+    if user.role not in ("assistant", "admin"):
         raise HTTPException(status_code=403, detail="Assistant access required")
+    return user
+
+
+async def require_admin(request: Request) -> TokenData:
+    user = await get_current_user(request)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+async def require_clinic_member(request: Request) -> TokenData:
+    """Doctor OR Assistant — anyone bound to a clinic. Used by routes that
+    both roles call (queue/add-patient under solo_mode etc.)."""
+    user = await get_current_user(request)
+    if user.role not in ("doctor", "assistant", "admin"):
+        raise HTTPException(status_code=403, detail="Clinic access required")
     return user

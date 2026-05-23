@@ -1,12 +1,15 @@
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+
 import { useAuthStore } from '../store/useAuthStore';
 import { UserRole } from '../types/auth.types';
+import { COLORS } from '../constants/theme';
+
 import AuthStack from './AuthStack';
 import DoctorTabNavigator from './DoctorTabNavigator';
 import AssistantTabNavigator from './AssistantTabNavigator';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { COLORS } from '../constants/theme';
+import AdminTabNavigator from './AdminTabNavigator';
 
 export default function RootNavigator(): React.JSX.Element {
   const { isAuthenticated, isLoading, user, restoreSession } = useAuthStore();
@@ -24,12 +27,15 @@ export default function RootNavigator(): React.JSX.Element {
   }
 
   // Show AuthStack if not authenticated OR if profile is incomplete
+  // (admins are seeded with is_profile_complete=true so they skip the auth flow)
   const showAuth = !isAuthenticated || (isAuthenticated && user && !user.isProfileComplete);
 
   return (
     <NavigationContainer>
       {showAuth ? (
         <AuthStack />
+      ) : user?.role === UserRole.ADMIN ? (
+        <AdminTabNavigator />
       ) : user?.role === UserRole.DOCTOR ? (
         <DoctorTabNavigator />
       ) : (

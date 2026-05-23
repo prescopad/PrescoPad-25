@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
-import { verifyOTP } from '../../services/authService';
+import { sendOTP, verifyOTP } from '../../services/authService';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useWalletStore } from '../../store/useWalletStore';
 import { UserRole } from '../../types/auth.types';
@@ -14,13 +14,24 @@ import { AuthStackParamList } from '../../types/navigation.types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'OTP'>;
 
+const RESEND_COOLDOWN_SECONDS = 30;
+
 export default function OTPScreen({ navigation, route }: Props): React.JSX.Element {
   const { phone, role } = route.params;
   const [otp, setOtp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(RESEND_COOLDOWN_SECONDS);
+  const [isResending, setIsResending] = useState(false);
   const setUser = useAuthStore((s) => s.setUser);
   const loadBalance = useWalletStore((s) => s.loadBalance);
   const inputRef = useRef<TextInput>(null);
+
+  // Resend cooldown timer.
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const t = setTimeout(() => setResendCountdown((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCountdown]);
 
   const handleVerify = async () => {
     if (otp.length !== 6) {
@@ -33,12 +44,9 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
       const response = await verifyOTP(phone, otp, role as UserRole);
 
       if (response.isNewUser || !response.user.isProfileComplete) {
-        // New user or incomplete profile - go to registration
-        // Store tokens first so registration API calls work
         await setUser(response.user, response.accessToken, response.refreshToken);
         navigation.replace('Registration', { role });
       } else {
-        // Existing user with complete profile - go to main app
         await setUser(response.user, response.accessToken, response.refreshToken);
         loadBalance().catch(() => { /* silent */ });
       }
@@ -49,6 +57,28 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
       setIsLoading(false);
     }
   };
+
+  const handleResend = async () => {
+    if (resendCountdown > 0 || isResending) return;
+    setIsResending(true);
+    try {
+      await sendOTP(phone, role as UserRole);
+      setResendCountdown(RESEND_COOLDOWN_SECONDS);
+      setOtp('');
+      inputRef.current?.focus();
+      Alert.alert('Sent', 'A new OTP has been sent to your phone.');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Could not resend OTP';
+      Alert.alert('Error', msg);
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const resendDisabled = resendCountdown > 0 || isResending;
+  const resendLabel = resendCountdown > 0
+    ? `Resend OTP in ${resendCountdown}s`
+    : (isResending ? 'Sending…' : "Didn't receive OTP? Resend");
 
   return (
     <KeyboardAvoidingView
@@ -96,8 +126,15 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.resendButton}>
-          <Text style={styles.resendText}>Didn't receive OTP? Resend</Text>
+        <TouchableOpacity
+          style={styles.resendButton}
+          onPress={handleResend}
+          disabled={resendDisabled}
+          activeOpacity={resendDisabled ? 1 : 0.6}
+        >
+          <Text style={[styles.resendText, resendDisabled && styles.resendDisabled]}>
+            {resendLabel}
+          </Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -105,71 +142,25 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  backButton: {
-    padding: SPACING.lg,
-    paddingTop: 50,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: SPACING.xxl,
-    paddingTop: SPACING.xxxl,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: COLORS.text,
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.sm,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    lineHeight: 22,
-    marginBottom: SPACING.xxxl,
-  },
-  phoneText: {
-    fontWeight: '700',
-    color: COLORS.text,
-  },
+  container: { flex: 1, backgroundColor: COLORS.white },
+  backButton: { padding: SPACING.lg, paddingTop: 50 },
+  content: { flex: 1, paddingHorizontal: SPACING.xxl, paddingTop: SPACING.xxxl },
+  title: { fontSize: 26, fontWeight: '800', color: COLORS.text, marginTop: SPACING.xl, marginBottom: SPACING.sm },
+  subtitle: { fontSize: 14, color: COLORS.textMuted, lineHeight: 22, marginBottom: SPACING.xxxl },
+  phoneText: { fontWeight: '700', color: COLORS.text },
   otpInput: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    paddingVertical: 16,
-    paddingHorizontal: SPACING.xl,
-    backgroundColor: COLORS.surfaceSecondary,
-    marginBottom: SPACING.xxl,
+    fontSize: 28, fontWeight: '700', color: COLORS.text, letterSpacing: 12,
+    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.lg,
+    paddingVertical: 16, paddingHorizontal: SPACING.xl,
+    backgroundColor: COLORS.surfaceSecondary, marginBottom: SPACING.xxl,
   },
   button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.lg,
-    paddingVertical: 16,
-    alignItems: 'center',
-    ...SHADOWS.md,
+    backgroundColor: COLORS.primary, borderRadius: RADIUS.lg,
+    paddingVertical: 16, alignItems: 'center', ...SHADOWS.md,
   },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.white,
-  },
-  resendButton: {
-    alignItems: 'center',
-    marginTop: SPACING.xl,
-  },
-  resendText: {
-    fontSize: 13,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+  resendButton: { alignItems: 'center', marginTop: SPACING.xl },
+  resendText: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
+  resendDisabled: { color: COLORS.textMuted },
 });
