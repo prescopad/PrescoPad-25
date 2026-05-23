@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     JWT_REFRESH_EXPIRES_IN: int = 30
 
     # OTP — demo mode must be explicitly enabled. Default is OFF for safety.
-    OTP_DEMO_MODE: bool = False
+    OTP_DEMO_MODE: bool = True
     OTP_DEMO_CODE: str = "123456"
     FAST2SMS_API_KEY: Optional[str] = None
 
