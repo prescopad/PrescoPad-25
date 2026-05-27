@@ -24,6 +24,10 @@ async def send_otp(body: SendOtpRequest):
     try:
         await auth_service.send_otp(body.phone, body.role)
         return _ok({"message": "OTP sent successfully"})
+    except ValueError as e:
+        # Expected, user-facing conditions: SMS not configured, rate-limited, etc.
+        # 503 = service unavailable (config/provider issue), not a server crash.
+        return _err(str(e), 503)
     except Exception as e:
         return _err(str(e), 500)
 

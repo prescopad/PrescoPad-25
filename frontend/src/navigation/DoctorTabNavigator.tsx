@@ -7,8 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
 import { DoctorStackParamList } from '../types/navigation.types';
 import api from '../services/api';
-import { useAuthStore } from '../store/useAuthStore';
-import { getMe } from '../services/authService';
 
 // Doctor screens
 import DoctorDashboard from '../screens/doctor/DoctorDashboard';
@@ -99,54 +97,29 @@ function DoctorSettingsStack(): React.JSX.Element {
 
 export default function DoctorTabNavigator(): React.JSX.Element {
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const meRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const user = useAuthStore((s) => s.user);
-  const setUser = useAuthStore((s) => s.setUser);
-  const isSolo = Boolean(user?.soloMode);
 
   useEffect(() => {
     const sendHeartbeat = () => {
       api.post('/auth/heartbeat').catch(() => {});
     };
-    // Refresh user.soloMode by re-reading /auth/me. Catches the case where an
-    // assistant just accepted an invite — the doctor's solo tabs disappear.
-    const refreshMe = async () => {
-      try {
-        const me = await getMe();
-        const current = useAuthStore.getState();
-        const tokenA = current.accessToken;
-        const tokenR = current.refreshToken;
-        if (tokenA && tokenR && (me.soloMode !== current.user?.soloMode || me.role !== current.user?.role)) {
-          await setUser(me, tokenA, tokenR);
-        }
-      } catch {
-        /* silent */
-      }
-    };
 
     sendHeartbeat();
-    refreshMe();
     heartbeatRef.current = setInterval(sendHeartbeat, 60_000);
-    meRefreshRef.current = setInterval(refreshMe, 60_000);
 
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         sendHeartbeat();
-        refreshMe();
         if (!heartbeatRef.current) heartbeatRef.current = setInterval(sendHeartbeat, 60_000);
-        if (!meRefreshRef.current) meRefreshRef.current = setInterval(refreshMe, 60_000);
       } else {
         if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
-        if (meRefreshRef.current) { clearInterval(meRefreshRef.current); meRefreshRef.current = null; }
       }
     });
 
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      if (meRefreshRef.current) clearInterval(meRefreshRef.current);
       sub.remove();
     };
-  }, [setUser]);
+  }, []);
 
   return (
     <Tab.Navigator
@@ -175,13 +148,13 @@ export default function DoctorTabNavigator(): React.JSX.Element {
     >
       <Tab.Screen name="DoctorQueue" component={DoctorQueueStack} options={{ tabBarLabel: 'Queue' }} />
 
-      {isSolo ? (
-        <Tab.Screen
-          name="DoctorPatients"
-          component={DoctorPatientStack}
-          options={{ tabBarLabel: 'Patients' }}
-        />
-      ) : null}
+      {/* Every doctor can add/manage patients directly, regardless of whether
+          they have assistants. */}
+      <Tab.Screen
+        name="DoctorPatients"
+        component={DoctorPatientStack}
+        options={{ tabBarLabel: 'Patients' }}
+      />
 
       <Tab.Screen name="DoctorWallet" component={DoctorWalletStack} options={{ tabBarLabel: 'Wallet' }} />
       <Tab.Screen name="DoctorAnalytics" component={DoctorAnalyticsStack} options={{ tabBarLabel: 'Analytics' }} />

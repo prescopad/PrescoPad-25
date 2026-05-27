@@ -225,12 +225,30 @@ async def complete_registration(user_id: str, data: dict) -> dict:
     return serialize_doc(user)
 
 
+async def _with_solo_mode(user_data: dict, clinic_id) -> dict:
+    """Attach clinic.solo_mode to a serialized user dict so the frontend can
+    show/hide the doctor's patient-management tab consistently across both
+    /auth/me and the login response."""
+    if clinic_id:
+        try:
+            db = get_db()
+            clinic = await db.clinics.find_one({"_id": ObjectId(clinic_id)})
+            if clinic:
+                user_data["solo_mode"] = bool(clinic.get("solo_mode", False))
+        except Exception:
+            pass
+    return user_data
+
+
 async def get_me(user_id: str) -> dict:
     db = get_db()
     user = await db.users.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise ValueError("User not found")
-    return serialize_doc(user)
+    data = serialize_doc(user)
+    data.pop("password_hash", None)
+    data.pop("otp_hash", None)
+    return await _with_solo_mode(data, user.get("clinic_id"))
 
 
 async def update_profile(user_id: str, data: dict) -> dict:
@@ -272,14 +290,7 @@ async def _build_auth_response(user: dict) -> dict:
     user_data.pop("otp_window_start_at", None)
 
     # Enrich with clinic.solo_mode so the frontend can adapt UI without a second call.
-    if user.get("clinic_id"):
-        try:
-            db = get_db()
-            clinic = await db.clinics.find_one({"_id": ObjectId(user["clinic_id"])})
-            if clinic:
-                user_data["solo_mode"] = bool(clinic.get("solo_mode", False))
-        except Exception:
-            pass
+    user_data = await _with_solo_mode(user_data, user.get("clinic_id"))
 
     return {
         "access_token": access_token,
