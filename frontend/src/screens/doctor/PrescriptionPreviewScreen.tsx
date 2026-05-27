@@ -20,6 +20,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { generatePrescriptionPDF } from '../../services/pdfService';
 import { hashPDF } from '../../services/cryptoService';
 import { updateQueueStatus } from '../../services/dataService';
+import { QueueStatus } from '../../types/queue.types';
 import { DoctorStackParamList } from '../../types/navigation.types';
 
 type Props = NativeStackScreenProps<DoctorStackParamList, 'PrescriptionPreview'>;
@@ -87,7 +88,7 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
       // Step 5: Mark queue item as completed (fire-and-forget)
       const queueItemId = usePrescriptionStore.getState().queueItemId;
       if (queueItemId) {
-        updateQueueStatus(queueItemId, 'completed').catch(() => {});
+        updateQueueStatus(queueItemId, QueueStatus.COMPLETED).catch(() => {});
       }
 
       // Step 6: Reload wallet balance to reflect backend deduction

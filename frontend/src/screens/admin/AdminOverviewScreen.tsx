@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
@@ -16,6 +17,7 @@ export default function AdminOverviewScreen(): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -25,12 +27,12 @@ export default function AdminOverviewScreen(): React.JSX.Element {
       const o = await fetchAdminOverview();
       setData(o);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load overview');
+      setError(e instanceof Error ? e.message : t('admin.failedLoadOverview'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -52,7 +54,7 @@ export default function AdminOverviewScreen(): React.JSX.Element {
       <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Admin Dashboard</Text>
+          <Text style={styles.headerTitle}>{t('admin.dashboard')}</Text>
           <Text style={styles.headerSubtitle}>{user?.name ?? user?.phone}</Text>
         </View>
         <Ionicons name="log-out-outline" size={24} color={COLORS.white} onPress={logout} />
@@ -70,41 +72,41 @@ export default function AdminOverviewScreen(): React.JSX.Element {
 
         {data && (
           <>
-            <SectionTitle title="Users" />
+            <SectionTitle title={t('admin.users')} />
             <View style={styles.grid}>
-              <Stat label="Doctors" value={data.users.doctors} color={COLORS.primary} icon="medkit" />
-              <Stat label="Assistants" value={data.users.assistants} color={COLORS.info} icon="people" />
-              <Stat label="Admins" value={data.users.admins} color={COLORS.warning} icon="shield-checkmark" />
-              <Stat label="Online doctors" value={data.users.onlineDoctors} color={COLORS.success} icon="radio-button-on" />
+              <Stat label={t('admin.doctors')} value={data.users.doctors} color={COLORS.primary} icon="medkit" />
+              <Stat label={t('admin.assistants')} value={data.users.assistants} color={COLORS.info} icon="people" />
+              <Stat label={t('admin.admins')} value={data.users.admins} color={COLORS.warning} icon="shield-checkmark" />
+              <Stat label={t('admin.onlineDoctors')} value={data.users.onlineDoctors} color={COLORS.success} icon="radio-button-on" />
             </View>
 
-            <SectionTitle title="Activity" />
+            <SectionTitle title={t('admin.activity')} />
             <View style={styles.grid}>
-              <Stat label="Clinics" value={data.clinics.total} color={COLORS.primary} icon="business" />
-              <Stat label="Patients" value={data.patients.total} color={COLORS.info} icon="person" />
-              <Stat label="Rx finalized" value={data.prescriptions.finalized} color={COLORS.success} icon="document-text" />
-              <Stat label="Rx today" value={data.prescriptions.today} color={COLORS.warning} icon="today" />
+              <Stat label={t('admin.clinics')} value={data.clinics.total} color={COLORS.primary} icon="business" />
+              <Stat label={t('admin.totalPatients')} value={data.patients.total} color={COLORS.info} icon="person" />
+              <Stat label={t('admin.rxFinalized')} value={data.prescriptions.finalized} color={COLORS.success} icon="document-text" />
+              <Stat label={t('admin.rxToday')} value={data.prescriptions.today} color={COLORS.warning} icon="today" />
             </View>
 
-            <SectionTitle title="Revenue" />
+            <SectionTitle title={t('nav.revenue')} />
             <View style={styles.card}>
-              <Row label="Total credits in" value={fmt(data.revenue.totalCredits)} />
-              <Row label="Total debits (Rx fees)" value={fmt(data.revenue.totalDebits)} />
-              <Row label="Refunds" value={fmt(data.revenue.totalRefunds)} />
+              <Row label={t('admin.totalCredits')} value={fmt(data.revenue.totalCredits)} />
+              <Row label={t('admin.totalDebits')} value={fmt(data.revenue.totalDebits)} />
+              <Row label={t('admin.refunds')} value={fmt(data.revenue.totalRefunds)} />
               <View style={styles.divider} />
-              <Row label="Platform gross" value={fmt(data.revenue.platformGross)} highlight />
+              <Row label={t('admin.platformGross')} value={fmt(data.revenue.platformGross)} highlight />
             </View>
 
-            <SectionTitle title="Prescription volume" />
+            <SectionTitle title={t('admin.prescriptionVolume')} />
             <View style={styles.card}>
-              <Row label="Today" value={String(data.prescriptions.today)} />
-              <Row label="Last 7 days" value={String(data.prescriptions.week)} />
-              <Row label="Last 30 days" value={String(data.prescriptions.month)} />
-              <Row label="All time" value={String(data.prescriptions.total)} />
+              <Row label={t('common.today')} value={String(data.prescriptions.today)} />
+              <Row label={t('admin.last7Days')} value={String(data.prescriptions.week)} />
+              <Row label={t('admin.last30Days')} value={String(data.prescriptions.month)} />
+              <Row label={t('admin.allTime')} value={String(data.prescriptions.total)} />
             </View>
 
             <Text style={styles.footnote}>
-              Updated {new Date(data.generatedAt).toLocaleString()}
+              {t('admin.updated')} {new Date(data.generatedAt).toLocaleString()}
             </Text>
           </>
         )}

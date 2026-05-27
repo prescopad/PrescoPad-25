@@ -4,6 +4,7 @@ import {
   RefreshControl, Alert, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
@@ -20,18 +21,19 @@ export default function AdminUsersScreen(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const load = useCallback(async () => {
     try {
       const r = await fetchAdminUsers({ role, search: search.trim() || undefined, limit: 200 });
       setUsers(r.users);
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to load users');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.failedLoadUsers'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, search]);
+  }, [role, search, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -41,20 +43,20 @@ export default function AdminUsersScreen(): React.JSX.Element {
       const updated = await setAdminUserActive(u.id, !isActive);
       setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Update failed');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.updateFailed'));
     }
   };
 
   const onPromote = async (u: AdminUser) => {
-    Alert.alert('Promote to admin?', `${u.name ?? u.phone} will gain platform-wide admin access.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('admin.promoteConfirm'), t('admin.promoteMessage', { name: u.name ?? u.phone }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Promote', style: 'destructive', onPress: async () => {
+        text: t('admin.promote'), style: 'destructive', onPress: async () => {
           try {
             const updated = await promoteAdminUser(u.id);
             setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
           } catch (e) {
-            Alert.alert('Error', e instanceof Error ? e.message : 'Promote failed');
+            Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.promoteFailed'));
           }
         },
       },
@@ -65,7 +67,7 @@ export default function AdminUsersScreen(): React.JSX.Element {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Users</Text>
+        <Text style={styles.headerTitle}>{t('admin.users')}</Text>
       </View>
 
       <View style={styles.controls}>
@@ -73,7 +75,7 @@ export default function AdminUsersScreen(): React.JSX.Element {
           <Ionicons name="search" size={16} color={COLORS.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by name or phone"
+            placeholder={t('admin.searchUsers')}
             placeholderTextColor={COLORS.textLight}
             value={search}
             onChangeText={setSearch}
@@ -81,10 +83,10 @@ export default function AdminUsersScreen(): React.JSX.Element {
           />
         </View>
         <View style={styles.chips}>
-          <Chip label="All" active={role === undefined} onPress={() => setRole(undefined)} />
-          <Chip label="Doctors" active={role === 'doctor'} onPress={() => setRole('doctor')} />
-          <Chip label="Assistants" active={role === 'assistant'} onPress={() => setRole('assistant')} />
-          <Chip label="Admins" active={role === 'admin'} onPress={() => setRole('admin')} />
+          <Chip label={t('common.all')} active={role === undefined} onPress={() => setRole(undefined)} />
+          <Chip label={t('admin.doctors')} active={role === 'doctor'} onPress={() => setRole('doctor')} />
+          <Chip label={t('admin.assistants')} active={role === 'assistant'} onPress={() => setRole('assistant')} />
+          <Chip label={t('admin.admins')} active={role === 'admin'} onPress={() => setRole('admin')} />
         </View>
       </View>
 
@@ -118,7 +120,7 @@ export default function AdminUsersScreen(): React.JSX.Element {
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.actionBtnText, !isActive && styles.actionBtnTextDanger]}>
-                      {isActive ? 'Deactivate' : 'Reactivate'}
+                      {isActive ? t('admin.deactivate') : t('admin.reactivate')}
                     </Text>
                   </TouchableOpacity>
                   {item.role !== 'admin' && (
@@ -127,14 +129,14 @@ export default function AdminUsersScreen(): React.JSX.Element {
                       style={[styles.actionBtn, styles.actionBtnPrimary]}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>Promote</Text>
+                      <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>{t('admin.promote')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
               </View>
             );
           }}
-          ListEmptyComponent={<Text style={styles.empty}>No users found.</Text>}
+          ListEmptyComponent={<Text style={styles.empty}>{t('admin.noUsers')}</Text>}
         />
       )}
     </View>

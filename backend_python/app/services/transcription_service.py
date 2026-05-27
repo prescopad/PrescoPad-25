@@ -56,6 +56,13 @@ def _retry_sync(fn, *, attempts: int = 3, base_delay: float = 1.0):
 # ── Step 1: Transcribe ────────────────────────────────────────────────────────
 
 def _transcribe_sync(file_path: str, filename: str):
+    """Transcribe in the SPOKEN language (Hindi / Marathi / English / Hinglish).
+
+    We deliberately do NOT use Whisper's translate task — translating to English
+    at the audio stage mangles Indian drug names and Hinglish dosing phrases.
+    Auto-detect keeps Devanagari + native words; the LLaMA extractor then maps
+    medical terms to standard English names.
+    """
     client = _groq_client()
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
@@ -64,6 +71,13 @@ def _transcribe_sync(file_path: str, filename: str):
         model=WHISPER_MODEL,
         temperature=0,
         response_format="verbose_json",
+        # A clinical prompt nudges Whisper toward medical vocabulary and keeps it
+        # transcribing rather than translating. No `language=` → auto-detect.
+        prompt=(
+            "Medical consultation between a doctor and patient in an Indian clinic. "
+            "Hindi, Marathi, and English may be mixed. Includes medicine names, "
+            "dosage, symptoms, diagnosis, and lab tests."
+        ),
     ))
 
 
@@ -107,15 +121,28 @@ Return ONLY a JSON array, no explanation, no markdown:"""
     try:
         labels = json.loads(raw)
     except json.JSONDecodeError:
-        log.warning("Diarization JSON parse failed, raw: %s", raw[:200])
-        labels = [{"index": i, "speaker": "Unknown"} for i in range(len(segments))]
+        log.warning("Diarization JSON parse failed, falling back to alternating speakers")
+        # Alternating fallback — far better for extraction than labelling
+        # everything "Unknown", which destroys the doctor/patient signal.
+        labels = [
+            {"index": i, "speaker": "Doctor" if i % 2 == 0 else "Patient"}
+            for i in range(len(segments))
+        ]
 
     label_map = {item["index"]: item["speaker"] for item in labels}
+
+    def _speaker(i: int) -> str:
+        spk = label_map.get(i)
+        if spk in ("Doctor", "Patient"):
+            return spk
+        # Unknown / missing → alternate so extraction still has structure.
+        return "Doctor" if i % 2 == 0 else "Patient"
+
     return [
         {
             "start": round(seg.start, 2),
             "end":   round(seg.end, 2),
-            "speaker": label_map.get(i, "Unknown"),
+            "speaker": _speaker(i),
             "text": seg.text.strip(),
         }
         for i, seg in enumerate(segments)
@@ -124,8 +151,11 @@ Return ONLY a JSON array, no explanation, no markdown:"""
 
 # ── Step 3: Extract medical info → prescription fields ───────────────────────
 
-def _extract_medical_info_sync(diarized: list) -> dict:
-    if not diarized:
+def _extract_medical_info_sync(diarized: list, full_text: str = "") -> dict:
+    # Extraction works off the diarized turns when available, but ALWAYS also
+    # includes the full raw transcript so it never degrades to empty when
+    # diarization is weak (e.g. one-blob audio or noisy Hindi/Marathi speech).
+    if not diarized and not full_text:
         return {}
 
     client = _groq_client()
@@ -135,66 +165,83 @@ def _extract_medical_info_sync(diarized: list) -> dict:
     conversation = "\n".join(
         f"{seg['speaker']} ({seg['start']}s): {seg['text']}"
         for seg in diarized
-    )
+    ) if diarized else ""
 
-    prompt = f"""You are a medical AI assistant in an Indian clinic. Extract structured prescription data from a doctor-patient consultation transcript.
+    raw_block = full_text.strip()
+
+    prompt = f"""You are a multilingual medical AI assistant in an Indian clinic. Extract structured prescription data from a doctor-patient consultation transcript.
+
+The transcript may be in HINDI, MARATHI, ENGLISH, or a mix (Hinglish/Manglish), and may be written in Devanagari script or Roman letters. You understand all of these fluently.
 
 TODAY'S DATE: {today_str} ({today_display})
 
-=== EXTREMELY IMPORTANT RULES ===
+=== LANGUAGE HANDLING ===
+- READ the conversation in whatever language it is in (Hindi/Marathi/English/mixed).
+- OUTPUT all values in clean ENGLISH using standard medical terminology:
+  * Translate symptoms to English: "बुखार"/"ताप"/"bukhar" → "fever", "खांसी"/"खोकला" → "cough", "पेट दर्द"/"पोटदुखी" → "abdominal pain", "सिरदर्द"/"डोकेदुखी" → "headache", "उलटी"/"उल्टी" → "vomiting", "दस्त"/"जुलाब" → "loose motions / diarrhea".
+  * Use the STANDARD English/generic name for medicines even if spoken in an accent or shortened: "paracetamol", "amoxicillin", "azithromycin", "pantoprazole", "cetirizine", "ORS", etc.
+  * Diagnosis in English medical terms.
 
-ZERO HALLUCINATION:
-- You MUST NOT invent any information that is not clearly present (explicitly or strongly implicitly) in the transcript.
-- If the doctor did NOT mention a diagnosis → diagnosis = null. Do not guess.
-- If the doctor did NOT mention any advice → advice = null. Do not synthesize one.
-- If the doctor did NOT mention a follow-up date → follow_up_date = null.
-- If no medicines were discussed → prescribed_medicines = [].
-- If no lab tests were ordered → lab_tests = [].
-- Empty values are correct. Empty values are the safe answer.
+=== MULTILINGUAL DOSING & TIMING CUES ===
+Hindi/Marathi → meaning:
+- "din mein ek baar" / "dिवसातून एकदा" / "OD" → frequency "1-0-0"
+- "din mein do baar" / "दिवसातून दोनदा" / "BD" → "1-0-1"
+- "din mein teen baar" / "TDS" → "1-1-1"
+- "subah-shaam" / "सकाळ-संध्याकाळ" → "1-0-1"
+- "raat ko" / "रात्री" / "at night" → "0-0-1"
+- "zaroorat padne par" / "गरज पडल्यास" / "SOS" → "As needed"
+- "khana khane ke baad" / "जेवणानंतर" / "after food" → timing "After food"
+- "khali pet" / "उपाशी पोटी" / "empty stomach" → "Empty stomach"
+- Duration: "paanch din" / "पाच दिवस" → "5 days"; "ek hafta" / "एक आठवडा" → "1 week"; "do hafte" → "2 weeks".
 
-REASONABLE INFERENCE (only when grounded in actual conversation):
-- "Take rest for a week, drink lots of fluids" → advice captures both.
-- "I'll give you a paracetamol for fever" → medicine = Paracetamol.
-- "come after 3 days" → follow_up_date = today + 3 days, in YYYY-MM-DD format.
-- "twice a day" → frequency = "1-0-1". "TDS" → "1-1-1". "OD" → "1-0-0". "At night" → "0-0-1". "SOS" → "As needed".
-- Hinglish: "do din mein aana" = come in 2 days, "khana khane ke baad" = after food.
+=== FOLLOW-UP DATE (relative → absolute) ===
+- "teen din baad aana" / "तीन दिवसांनी या" / "come after 3 days" → today + 3 days → YYYY-MM-DD
+- "agle hafte" / "पुढच्या आठवड्यात" / "next week" → today + 7 days
+- "do hafte baad" → today + 14 days
+- If no follow-up was mentioned → null. NEVER copy today's date unless the doctor explicitly said "today"/"tomorrow".
 
-NEVER fabricate a follow-up date when none was discussed. NEVER copy "today" as the follow-up date unless the doctor explicitly said "tomorrow" / "today".
+=== ZERO HALLUCINATION ===
+- Do NOT invent anything not present in the transcript.
+- No diagnosis stated → diagnosis = null. No advice → advice = null. No follow-up → null.
+- No medicines discussed → prescribed_medicines = []. No lab tests → lab_tests = [].
+- Empty values are the correct, safe answer.
 
 === OUTPUT FORMAT ===
 Return ONLY valid JSON, no markdown, no explanation:
 
 {{
-  "chief_complaint": "primary reason for visit, or null if not stated",
-  "diagnosis": "primary diagnosis, or null if doctor did not name one",
-  "symptoms": ["all symptoms explicitly mentioned"],
-  "advice": "complete doctor advice as a single string, or null if no advice was given",
-  "follow_up_date": "YYYY-MM-DD computed from today ({today_str}), or null if not mentioned",
+  "chief_complaint": "primary reason for visit in English, or null",
+  "diagnosis": "primary diagnosis in English medical terms, or null",
+  "symptoms": ["all symptoms in English"],
+  "advice": "complete doctor advice in English as a single string, or null",
+  "follow_up_date": "YYYY-MM-DD computed from today ({today_str}), or null",
   "prescribed_medicines": [
     {{
-      "medicine_name": "exact name as spoken",
+      "medicine_name": "standard English/generic medicine name",
       "type": "Tablet | Capsule | Syrup | Injection | Drops | Cream | Ointment | Inhaler | Powder | Gel | Patch | Suppository | Other",
-      "dosage": "strength e.g. 500mg, or empty string if not mentioned",
-      "frequency": "frequency in 1-0-1 form or natural language, or empty string",
+      "dosage": "strength e.g. 500mg, or empty string",
+      "frequency": "1-0-1 form or natural language, or empty string",
       "duration": "e.g. 5 days, 1 week, or empty string",
       "timing": "Before food | After food | With food | Empty stomach | At bedtime | As needed | empty string",
-      "notes": "special instructions, or empty string"
+      "notes": "special instructions in English, or empty string"
     }}
   ],
   "lab_tests": [
     {{
-      "test_name": "full test name",
+      "test_name": "full test name in English",
       "category": "Blood | Urine | Stool | Imaging | Microbiology | Cardiology | Pulmonary | Neurology | Pathology | Allergy | Other",
-      "notes": "instructions e.g. fasting required, or empty string"
+      "notes": "instructions in English e.g. fasting required, or empty string"
     }}
   ]
 }}
 
-=== CONSULTATION TRANSCRIPT (BEGIN) ===
-{conversation}
-=== CONSULTATION TRANSCRIPT (END) ===
+=== SPEAKER-LABELLED TURNS (may be approximate) ===
+{conversation or "(diarization unavailable — rely on the full transcript below)"}
 
-Reminder: Empty values are correct when the information was not discussed. Today is {today_str}. Return JSON only."""
+=== FULL RAW TRANSCRIPT (authoritative source) ===
+{raw_block or "(empty)"}
+
+Reminder: read any language, OUTPUT English. Empty values are correct when not discussed. Today is {today_str}. Return JSON only."""
 
     completion = _retry_sync(lambda: client.chat.completions.create(
         model=LLAMA_MODEL,
@@ -319,7 +366,9 @@ async def process_audio_file(
         diarized = [{"start": 0.0, "end": 0.0, "speaker": "Unknown", "text": full_text}] if full_text else []
 
     try:
-        extraction = await loop.run_in_executor(_executor, partial(_extract_medical_info_sync, diarized))
+        extraction = await loop.run_in_executor(
+            _executor, partial(_extract_medical_info_sync, diarized, full_text)
+        )
     except Exception as e:
         log.warning("Medical extraction failed, continuing without it: %s", e)
         extraction = {}

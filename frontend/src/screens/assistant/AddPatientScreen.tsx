@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -25,14 +26,14 @@ import type { AssistantStackParamList } from '../../types/navigation.types';
 
 type NavigationProp = NativeStackNavigationProp<AssistantStackParamList>;
 
-const GENDER_OPTIONS: { label: string; value: Gender }[] = [
-  { label: 'Male', value: Gender.MALE },
-  { label: 'Female', value: Gender.FEMALE },
-  { label: 'Other', value: Gender.OTHER },
-];
-
 export default function AddPatientScreen(): React.JSX.Element {
+  const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
+  const GENDER_OPTIONS: { label: string; value: Gender }[] = [
+    { label: t('patient.male'), value: Gender.MALE },
+    { label: t('patient.female'), value: Gender.FEMALE },
+    { label: t('patient.other'), value: Gender.OTHER },
+  ];
   const createPatient = usePatientStore((s) => s.createPatient);
   const addToQueue = useQueueStore((s) => s.addToQueue);
   const user = useAuthStore((s) => s.user);
@@ -101,7 +102,7 @@ export default function AddPatientScreen(): React.JSX.Element {
         `${patient.name} has been registered successfully. Add to queue?`,
         [
           {
-            text: 'No',
+            text: t('common.no'),
             style: 'cancel',
             onPress: () => navigation.goBack(),
           },
@@ -112,7 +113,7 @@ export default function AddPatientScreen(): React.JSX.Element {
                 await addToQueue(patient.id, user.id);
                 navigation.goBack();
               } catch {
-                Alert.alert('Error', 'Patient registered but failed to add to queue.');
+                Alert.alert(t('common.error'), 'Patient registered but failed to add to queue.');
                 navigation.goBack();
               }
             },
@@ -122,7 +123,7 @@ export default function AddPatientScreen(): React.JSX.Element {
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to register patient';
-      Alert.alert('Error', message);
+      Alert.alert(t('common.error'), message);
     } finally {
       setIsSubmitting(false);
     }
@@ -156,7 +157,7 @@ export default function AddPatientScreen(): React.JSX.Element {
         {/* Name */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>
-            Full Name <Text style={styles.required}>*</Text>
+            {t('auth.fullName')} <Text style={styles.required}>*</Text>
           </Text>
           <TextInput
             style={[styles.input, errors.name ? styles.inputError : null]}
@@ -173,7 +174,7 @@ export default function AddPatientScreen(): React.JSX.Element {
         <View style={styles.row}>
           <View style={[styles.fieldGroup, styles.halfField]}>
             <Text style={styles.label}>
-              Age <Text style={styles.required}>*</Text>
+              {t('patient.age')} <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={[styles.input, errors.age ? styles.inputError : null]}
@@ -206,7 +207,7 @@ export default function AddPatientScreen(): React.JSX.Element {
 
         {/* Gender */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Gender</Text>
+          <Text style={styles.label}>{t('patient.gender')}</Text>
           <View style={styles.chipRow}>
             {GENDER_OPTIONS.map((opt) => {
               const isSelected = form.gender === opt.value;
@@ -237,7 +238,7 @@ export default function AddPatientScreen(): React.JSX.Element {
         {/* Phone */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>
-            Phone <Text style={styles.required}>*</Text>
+            {t('patient.phone')} <Text style={styles.required}>*</Text>
           </Text>
           <View style={styles.phoneInputContainer}>
             <Text style={styles.countryCode}>+91</Text>
@@ -261,7 +262,7 @@ export default function AddPatientScreen(): React.JSX.Element {
 
         {/* Address */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Address</Text>
+          <Text style={styles.label}>{t('patient.address')}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Enter address"
@@ -276,7 +277,7 @@ export default function AddPatientScreen(): React.JSX.Element {
 
         {/* Blood Group */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Blood Group</Text>
+          <Text style={styles.label}>{t('patient.bloodGroup')}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -312,7 +313,7 @@ export default function AddPatientScreen(): React.JSX.Element {
 
         {/* Allergies */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Allergies</Text>
+          <Text style={styles.label}>{t('patient.allergies')}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="e.g., Penicillin, Dust, Peanuts"

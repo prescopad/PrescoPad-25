@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, RefreshControl, StatusBar,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
@@ -16,6 +17,7 @@ export default function AdminRevenueScreen(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const load = useCallback(async () => {
     try {
@@ -34,7 +36,7 @@ export default function AdminRevenueScreen(): React.JSX.Element {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Revenue</Text>
+        <Text style={styles.headerTitle}>{t('nav.revenue')}</Text>
       </View>
 
       <View style={styles.tabs}>

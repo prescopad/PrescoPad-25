@@ -11,6 +11,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -28,6 +29,7 @@ type NavigationProp = NativeStackNavigationProp<AssistantStackParamList>;
 type DetailRouteProp = RouteProp<AssistantStackParamList, 'PatientDetail'>;
 
 export default function PatientDetailScreen(): React.JSX.Element {
+  const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<DetailRouteProp>();
   const { patientId } = route.params;
@@ -55,7 +57,7 @@ export default function PatientDetailScreen(): React.JSX.Element {
       const data = await getPatientById(patientId);
       setPatient(data);
     } catch {
-      Alert.alert('Error', 'Failed to load patient information.');
+      Alert.alert(t('common.error'), 'Failed to load patient information.');
     } finally {
       setIsLoadingPatient(false);
     }
@@ -78,13 +80,13 @@ export default function PatientDetailScreen(): React.JSX.Element {
     setAddingToQueue(true);
     try {
       await addToQueue(patient.id, user.id);
-      Alert.alert('Success', `${patient.name} has been added to the queue.`, [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      Alert.alert(t('common.success'), `${patient.name} has been added to the queue.`, [
+        { text: t('common.ok'), onPress: () => navigation.goBack() },
       ]);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to add to queue';
-      Alert.alert('Error', message);
+      Alert.alert(t('common.error'), message);
     } finally {
       setAddingToQueue(false);
     }
@@ -141,7 +143,7 @@ export default function PatientDetailScreen(): React.JSX.Element {
         >
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Patient Details</Text>
+        <Text style={styles.headerTitle}>{t('patient.patientDetails')}</Text>
         <TouchableOpacity
           style={styles.editButton}
           onPress={handleEditPatient}
@@ -174,28 +176,28 @@ export default function PatientDetailScreen(): React.JSX.Element {
           <View style={styles.infoGrid}>
             <InfoRow
               icon="call-outline"
-              label="Phone"
+              label={t('patient.phone')}
               value={patient.phone || '--'}
             />
             <InfoRow
               icon="location-outline"
-              label="Address"
+              label={t('patient.address')}
               value={patient.address || '--'}
             />
             <InfoRow
               icon="water-outline"
-              label="Blood Group"
+              label={t('patient.bloodGroup')}
               value={patient.bloodGroup || '--'}
             />
             <InfoRow
               icon="fitness-outline"
-              label="Weight"
+              label={t('patient.weight')}
               value={patient.weight ? `${patient.weight} kg` : '--'}
             />
             <InfoRow
               icon="warning-outline"
-              label="Allergies"
-              value={patient.allergies || 'None'}
+              label={t('patient.allergies')}
+              value={patient.allergies || t('common.none')}
               isLast
             />
           </View>
@@ -213,7 +215,7 @@ export default function PatientDetailScreen(): React.JSX.Element {
           ) : (
             <>
               <Ionicons name="add-circle-outline" size={22} color={COLORS.white} />
-              <Text style={styles.addQueueButtonText}>Add to Queue</Text>
+              <Text style={styles.addQueueButtonText}>{t('queue.addToQueue')}</Text>
             </>
           )}
         </TouchableOpacity>

@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DoctorStackParamList } from '../../types/navigation.types';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
@@ -19,6 +20,7 @@ import { usePrescriptionStore } from '../../store/usePrescriptionStore';
 type Props = NativeStackScreenProps<DoctorStackParamList, 'TranscriptHistory'>;
 
 export default function TranscriptHistoryScreen({ navigation, route }: Props): React.JSX.Element {
+  const { t } = useTranslation();
   const { patientId, patientName, queueItem, patient } = route.params;
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,13 +41,13 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
     })();
   }, [patientId]);
 
-  const handleUseForPrescription = (t: Transcript) => {
+  const handleUseForPrescription = (transcript: Transcript) => {
     if (!queueItem || !patient) {
       Alert.alert('Not available', 'Open this screen from a patient consultation to use a transcript.');
       return;
     }
 
-    const ext = (t.medical_extraction || {}) as Record<string, unknown>;
+    const ext = (transcript.medical_extraction || {}) as Record<string, unknown>;
     const rawMeds = (ext.prescribed_medicines as Record<string, unknown>[] | null) || [];
     const rawTests = (ext.lab_tests as Record<string, unknown>[] | null) || [];
 
@@ -65,11 +67,11 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
           notes: String(m.notes || ''),
         })),
       lab_tests: rawTests
-        .filter((t) => t.test_name)
-        .map((t) => ({
-          test_name: String(t.test_name || ''),
-          category: String(t.category || 'Other'),
-          notes: String(t.notes || ''),
+        .filter((lt) => lt.test_name)
+        .map((lt) => ({
+          test_name: String(lt.test_name || ''),
+          category: String(lt.category || 'Other'),
+          notes: String(lt.notes || ''),
         })),
     };
 
@@ -77,9 +79,9 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
       'Use this transcript?',
       'This will apply the extracted diagnosis, medicines, and lab tests to a new prescription.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Apply',
+          text: t('common.apply'),
           onPress: () => {
             // Single atomic update — avoids race condition where ConsultScreen
             // mounts between separate store calls and resets the draft.
@@ -150,7 +152,7 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading transcripts…</Text>
+          <Text style={styles.loadingText}>{t('common.loading')}</Text>
         </View>
       ) : transcripts.length === 0 ? (
         <View style={styles.emptyBox}>
@@ -162,25 +164,25 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
-          {transcripts.map((t) => {
-            const isExpanded = expanded === t.id;
-            const extraction = (t.medical_extraction || {}) as Record<string, unknown>;
+          {transcripts.map((tr) => {
+            const isExpanded = expanded === tr.id;
+            const extraction = (tr.medical_extraction || {}) as Record<string, unknown>;
 
             return (
-              <View key={t.id} style={styles.card}>
+              <View key={tr.id} style={styles.card}>
                 {/* Card header */}
                 <TouchableOpacity
                   style={styles.cardHeader}
-                  onPress={() => setExpanded(isExpanded ? null : t.id)}
+                  onPress={() => setExpanded(isExpanded ? null : tr.id)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.cardIconBox}>
                     <Ionicons name="mic" size={18} color={COLORS.primary} />
                   </View>
                   <View style={styles.cardMeta}>
-                    <Text style={styles.cardDate}>{formatDate(t.created_at)}</Text>
+                    <Text style={styles.cardDate}>{formatDate(tr.created_at)}</Text>
                     <Text style={styles.cardDuration}>
-                      {formatDuration(t.audio_duration_seconds)} · {t.diarized_transcript?.length ?? 0} segments
+                      {formatDuration(tr.audio_duration_seconds)} · {tr.diarized_transcript?.length ?? 0} segments
                     </Text>
                   </View>
                   <Ionicons
@@ -198,7 +200,7 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
                       <View style={styles.infoRow}>
                         <Ionicons name="medical" size={14} color={COLORS.primary} />
                         <Text style={styles.infoText}>
-                          <Text style={styles.infoLabel}>Diagnosis: </Text>
+                          <Text style={styles.infoLabel}>{t('consult.diagnosis')}: </Text>
                           {String(extraction.diagnosis)}
                         </Text>
                       </View>
@@ -208,7 +210,7 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
                       <View style={styles.infoRow}>
                         <Ionicons name="medkit-outline" size={14} color={COLORS.primary} />
                         <Text style={styles.infoText}>
-                          <Text style={styles.infoLabel}>Medicines: </Text>
+                          <Text style={styles.infoLabel}>{t('consult.medicines')}: </Text>
                           {(extraction.prescribed_medicines as Record<string, unknown>[])
                             .map((m) => String(m.name || m.medicine_name || ''))
                             .filter(Boolean)
@@ -222,7 +224,7 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
 
                     {/* Diarized transcript */}
                     <Text style={styles.transcriptLabel}>Transcript</Text>
-                    {(t.diarized_transcript || []).map((seg, i) => (
+                    {(tr.diarized_transcript || []).map((seg, i) => (
                       <View key={i} style={styles.segRow}>
                         <View style={[
                           styles.speakerBadge,
@@ -237,15 +239,15 @@ export default function TranscriptHistoryScreen({ navigation, route }: Props): R
                     ))}
 
                     {/* Full transcript fallback */}
-                    {(!t.diarized_transcript || t.diarized_transcript.length === 0) && t.full_transcript ? (
-                      <Text style={styles.fullText}>{t.full_transcript}</Text>
+                    {(!tr.diarized_transcript || tr.diarized_transcript.length === 0) && tr.full_transcript ? (
+                      <Text style={styles.fullText}>{tr.full_transcript}</Text>
                     ) : null}
 
                     {/* Apply button — only shown when opened from a consultation */}
                     {queueItem && patient ? (
                       <TouchableOpacity
                         style={styles.applyBtn}
-                        onPress={() => handleUseForPrescription(t)}
+                        onPress={() => handleUseForPrescription(tr)}
                         activeOpacity={0.8}
                       >
                         <Ionicons name="document-text-outline" size={16} color={COLORS.white} />

@@ -7,6 +7,7 @@ import NetworkBanner from './src/components/NetworkBanner';
 import { getDatabase } from './src/database/database';
 import { COLORS } from './src/constants/theme';
 import { APP_CONFIG } from './src/constants/config';
+import { initI18n } from './src/i18n';
 
 export default function App(): React.JSX.Element {
   const [dbReady, setDbReady] = useState(false);
@@ -14,8 +15,11 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     async function init() {
-      // Initialize database
-      await getDatabase();
+      // Initialize i18n (loads persisted / device language) and the database.
+      await Promise.all([
+        initI18n().catch(() => { /* fall back to English */ }),
+        getDatabase(),
+      ]);
       setDbReady(true);
 
       // Show splash for 2 seconds

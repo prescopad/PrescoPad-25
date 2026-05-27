@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -39,22 +40,8 @@ function getStatusColor(status: QueueStatus): string {
   }
 }
 
-function getStatusLabel(status: QueueStatus): string {
-  switch (status) {
-    case QueueStatus.WAITING:
-      return 'Waiting';
-    case QueueStatus.IN_PROGRESS:
-      return 'In Progress';
-    case QueueStatus.COMPLETED:
-      return 'Completed';
-    case QueueStatus.CANCELLED:
-      return 'Cancelled';
-    default:
-      return status;
-  }
-}
-
 export default function AssistantDashboard(): React.JSX.Element {
+  const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
   const { queueItems, stats, isLoading, doctorReady, loadQueue, loadStats, startPolling, stopPolling } =
     useQueueStore();
@@ -134,9 +121,24 @@ export default function AssistantDashboard(): React.JSX.Element {
       item.status === QueueStatus.IN_PROGRESS,
   );
 
+  const statusLabelKey = (status: QueueStatus): string => {
+    switch (status) {
+      case QueueStatus.WAITING:
+        return t('queue.waiting');
+      case QueueStatus.IN_PROGRESS:
+        return t('queue.inProgress');
+      case QueueStatus.COMPLETED:
+        return t('queue.completed');
+      case QueueStatus.CANCELLED:
+        return t('queue.cancelled');
+      default:
+        return status;
+    }
+  };
+
   const renderQueueItem = ({ item }: { item: QueueItem }) => {
     const statusColor = getStatusColor(item.status);
-    const statusLabel = getStatusLabel(item.status);
+    const statusLabel = statusLabelKey(item.status);
     return (
       <TouchableOpacity
         style={styles.queueCard}
@@ -193,7 +195,7 @@ export default function AssistantDashboard(): React.JSX.Element {
   const renderEmptyQueue = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="people-outline" size={64} color={COLORS.textLight} />
-      <Text style={styles.emptyTitle}>No Patients in Queue</Text>
+      <Text style={styles.emptyTitle}>{t('queue.empty')}</Text>
       <Text style={styles.emptySubtitle}>
         Add patients using the search bar above or the button below
       </Text>
@@ -238,7 +240,7 @@ export default function AssistantDashboard(): React.JSX.Element {
             ]}
           />
           <Text style={styles.doctorReadyText}>
-            {doctorReady ? 'Doctor is Ready' : 'Doctor Not Available'}
+            {doctorReady ? t('queue.doctorReady') : 'Doctor Not Available'}
           </Text>
         </View>
       </View>
@@ -253,13 +255,13 @@ export default function AssistantDashboard(): React.JSX.Element {
           <Text style={[styles.statValue, { color: COLORS.warning }]}>
             {stats.waiting}
           </Text>
-          <Text style={styles.statLabel}>Waiting</Text>
+          <Text style={styles.statLabel}>{t('queue.waiting')}</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={[styles.statValue, { color: COLORS.primary }]}>
             {stats.inProgress}
           </Text>
-          <Text style={styles.statLabel}>In Progress</Text>
+          <Text style={styles.statLabel}>{t('queue.inProgress')}</Text>
         </View>
       </View>
 

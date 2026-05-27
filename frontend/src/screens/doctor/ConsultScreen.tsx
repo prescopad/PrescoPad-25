@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { usePrescriptionStore } from '../../store/usePrescriptionStore';
@@ -25,6 +26,7 @@ type LabTestDraft = Omit<PrescriptionLabTest, 'id' | 'prescriptionId'>;
 type ConsultScreenProps = NativeStackScreenProps<DoctorStackParamList, 'Consult'>;
 
 export default function ConsultScreen({ navigation, route }: ConsultScreenProps): React.JSX.Element {
+  const { t } = useTranslation();
   const { queueItem, patient } = route.params;
   const user = useAuthStore((s) => s.user);
   const {
@@ -99,7 +101,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
       'Remove Medicine',
       `Remove ${currentDraft.medicines[index]?.medicineName}?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
@@ -114,7 +116,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
       'Remove Lab Test',
       `Remove ${currentDraft.labTests[index]?.testName}?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
@@ -126,18 +128,18 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
   const handlePreview = async () => {
     if (!currentDraft.diagnosis.trim()) {
-      Alert.alert('Required', 'Please enter a diagnosis.');
+      Alert.alert(t('common.required'), t('consult.diagnosisRequired'));
       return;
     }
     if (currentDraft.medicines.length === 0 && currentDraft.labTests.length === 0) {
       Alert.alert(
         'Empty Prescription',
-        'Please add at least one medicine or lab test.',
+        t('consult.needMedOrTest'),
       );
       return;
     }
     if (!user?.id) {
-      Alert.alert('Error', 'Doctor session not found. Please re-login.');
+      Alert.alert(t('common.error'), 'Doctor session not found. Please re-login.');
       return;
     }
 
@@ -147,7 +149,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
       navigation.navigate('PrescriptionPreview', { prescriptionId: prescription.id });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to create prescription';
-      Alert.alert('Error', message);
+      Alert.alert(t('common.error'), message);
     } finally {
       setIsCreating(false);
     }
@@ -208,7 +210,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
             <Ionicons name="mic" size={18} color={COLORS.white} />
           </View>
           <View style={styles.aiBtnText}>
-            <Text style={styles.aiBtnTitle}>AI Consultation Recording</Text>
+            <Text style={styles.aiBtnTitle}>{t('consult.aiRecording')}</Text>
             <Text style={styles.aiBtnSub}>Record, transcribe &amp; auto-fill prescription</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
@@ -217,7 +219,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         {/* Diagnosis */}
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
-            <Text style={styles.sectionTitle}>Diagnosis *</Text>
+            <Text style={styles.sectionTitle}>{t('consult.diagnosis')} *</Text>
             {missingDiagnosis && <MissingBadge />}
           </View>
           <TextInput
@@ -237,7 +239,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionLabelRow}>
               <Text style={styles.sectionTitle}>
-                Medicines ({currentDraft.medicines.length})
+                {t('consult.medicines')} ({currentDraft.medicines.length})
               </Text>
               {missingMedicines && <MissingBadge />}
             </View>
@@ -247,7 +249,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
               activeOpacity={0.7}
             >
               <Ionicons name="add" size={18} color={COLORS.white} />
-              <Text style={styles.addButtonText}>Add</Text>
+              <Text style={styles.addButtonText}>{t('common.add')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -293,7 +295,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionLabelRow}>
               <Text style={styles.sectionTitle}>
-                Lab Tests ({currentDraft.labTests.length})
+                {t('consult.labTests')} ({currentDraft.labTests.length})
               </Text>
               {missingLabTests && <MissingBadge />}
             </View>
@@ -303,7 +305,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
               activeOpacity={0.7}
             >
               <Ionicons name="add" size={18} color={COLORS.white} />
-              <Text style={styles.addButtonText}>Add</Text>
+              <Text style={styles.addButtonText}>{t('common.add')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -360,7 +362,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         {/* Follow-up Date */}
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
-            <Text style={styles.sectionTitle}>Follow-up Date</Text>
+            <Text style={styles.sectionTitle}>{t('consult.followUp')}</Text>
             {missingFollowUp && <MissingBadge />}
           </View>
           <View style={[styles.followUpRow, missingFollowUp && styles.inputMissing]}>
@@ -397,7 +399,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
           ) : (
             <>
               <Ionicons name="document-text" size={20} color={COLORS.white} />
-              <Text style={styles.previewButtonText}>Preview Prescription</Text>
+              <Text style={styles.previewButtonText}>{t('consult.preview')}</Text>
             </>
           )}
         </TouchableOpacity>

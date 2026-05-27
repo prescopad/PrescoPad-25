@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { completeRegistration } from '../../services/authService';
@@ -13,6 +14,7 @@ import { AuthStackParamList } from '../../types/navigation.types';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Registration'>;
 
 export default function RegistrationScreen({ route }: Props): React.JSX.Element {
+  const { t } = useTranslation();
   const { role } = route.params;
   const isDoctor = role === 'doctor';
   const setUser = useAuthStore((s) => s.setUser);
@@ -55,8 +57,8 @@ export default function RegistrationScreen({ route }: Props): React.JSX.Element 
       const response = await completeRegistration(data as Parameters<typeof completeRegistration>[0]);
       await setUser(response.user, response.accessToken, response.refreshToken);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Registration failed';
-      Alert.alert('Error', msg);
+      const msg = error instanceof Error ? error.message : t('auth.registrationFailed');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setIsLoading(false);
     }
@@ -76,22 +78,22 @@ export default function RegistrationScreen({ route }: Props): React.JSX.Element 
             size={48}
             color={COLORS.primary}
           />
-          <Text style={styles.title}>Complete Your Profile</Text>
+          <Text style={styles.title}>{t('auth.completeProfile')}</Text>
           <Text style={styles.subtitle}>
             {isDoctor
-              ? 'Set up your doctor profile and clinic to get started'
-              : 'Fill in your details to get started'}
+              ? t('auth.doctorProfileHint')
+              : t('auth.assistantProfileHint')}
           </Text>
         </View>
 
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Full Name *</Text>
+            <Text style={styles.label}>{t('auth.fullNameRequired')}</Text>
             <TextInput
               style={styles.input}
               value={name}
               onChangeText={setName}
-              placeholder={isDoctor ? 'Dr. John Smith' : 'Your full name'}
+              placeholder={isDoctor ? t('auth.doctorNamePlaceholder') : t('auth.assistantNamePlaceholder')}
               placeholderTextColor={COLORS.textLight}
               autoFocus
             />
@@ -100,34 +102,34 @@ export default function RegistrationScreen({ route }: Props): React.JSX.Element 
           {isDoctor ? (
             <>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Specialty</Text>
+                <Text style={styles.label}>{t('auth.specialty')}</Text>
                 <TextInput
                   style={styles.input}
                   value={specialty}
                   onChangeText={setSpecialty}
-                  placeholder="e.g. General Physician, Pediatrician"
+                  placeholder={t('auth.specialtyPlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Registration Number</Text>
+                <Text style={styles.label}>{t('auth.regNumber')}</Text>
                 <TextInput
                   style={styles.input}
                   value={regNumber}
                   onChangeText={setRegNumber}
-                  placeholder="Medical council registration number"
+                  placeholder={t('auth.regNumberPlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Clinic Name *</Text>
+                <Text style={styles.label}>{t('auth.clinicNameRequired')}</Text>
                 <TextInput
                   style={styles.input}
                   value={clinicName}
                   onChangeText={setClinicName}
-                  placeholder="Your clinic or hospital name"
+                  placeholder={t('auth.clinicNamePlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                 />
               </View>
@@ -135,48 +137,48 @@ export default function RegistrationScreen({ route }: Props): React.JSX.Element 
           ) : (
             <>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Qualification</Text>
+                <Text style={styles.label}>{t('auth.qualification')}</Text>
                 <TextInput
                   style={styles.input}
                   value={qualification}
                   onChangeText={setQualification}
-                  placeholder="e.g. ANM, GNM, BSc Nursing"
+                  placeholder={t('auth.qualificationPlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                 />
               </View>
 
               <View style={styles.row}>
                 <View style={[styles.inputGroup, styles.rowHalf]}>
-                  <Text style={styles.label}>Experience (Years)</Text>
+                  <Text style={styles.label}>{t('auth.experienceYears')}</Text>
                   <TextInput
                     style={styles.input}
                     value={experienceYears}
                     onChangeText={setExperienceYears}
-                    placeholder="e.g. 3"
+                    placeholder={t('auth.experiencePlaceholder')}
                     placeholderTextColor={COLORS.textLight}
                     keyboardType="numeric"
                     maxLength={2}
                   />
                 </View>
                 <View style={[styles.inputGroup, styles.rowHalf]}>
-                  <Text style={styles.label}>City</Text>
+                  <Text style={styles.label}>{t('auth.city')}</Text>
                   <TextInput
                     style={styles.input}
                     value={city}
                     onChangeText={setCity}
-                    placeholder="e.g. Mumbai"
+                    placeholder={t('auth.cityPlaceholder')}
                     placeholderTextColor={COLORS.textLight}
                   />
                 </View>
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Address</Text>
+                <Text style={styles.label}>{t('auth.address')}</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={address}
                   onChangeText={setAddress}
-                  placeholder="Your full address"
+                  placeholder={t('auth.addressPlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                   multiline
                   numberOfLines={2}
@@ -195,7 +197,7 @@ export default function RegistrationScreen({ route }: Props): React.JSX.Element 
           {isLoading ? (
             <ActivityIndicator color={COLORS.white} />
           ) : (
-            <Text style={styles.buttonText}>Get Started</Text>
+            <Text style={styles.buttonText}>{t('auth.getStarted')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

@@ -4,6 +4,7 @@ import {
   ScrollView, Alert, ActivityIndicator, RefreshControl, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
@@ -13,6 +14,7 @@ import * as ConnectionService from '../../services/connectionService';
 import { refreshSession } from '../../services/authService';
 
 export default function ConnectionScreen(): React.JSX.Element {
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const { user, setUser } = useAuthStore();
   const isDoctor = user?.role === 'doctor';
@@ -63,6 +65,19 @@ export default function ConnectionScreen(): React.JSX.Element {
     loadData();
   }, [loadData]);
 
+  const loadClinics = useCallback(async (search?: string) => {
+    setLoadingClinics(true);
+    try {
+      const result = await ConnectionService.listClinics(search);
+      setClinics(result);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to load clinics');
+      setClinics([]);
+    } finally {
+      setLoadingClinics(false);
+    }
+  }, []);
+
   // Load clinics for assistant on step 1
   useEffect(() => {
     if (!isDoctor && connectionStep === 'select-hospital') {
@@ -95,7 +110,7 @@ export default function ConnectionScreen(): React.JSX.Element {
   const handleInvite = async () => {
     const phone = invitePhone.trim().replace(/\D/g, '');
     if (phone.length < 10) {
-      Alert.alert('Invalid', 'Enter a valid 10-digit phone number');
+      Alert.alert(t('common.invalid'), 'Enter a valid 10-digit phone number');
       return;
     }
 
@@ -107,7 +122,7 @@ export default function ConnectionScreen(): React.JSX.Element {
       loadData();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to invite';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     } finally {
       setInviting(false);
     }
@@ -116,7 +131,7 @@ export default function ConnectionScreen(): React.JSX.Element {
   const handleRequestToJoin = async () => {
     const code = doctorCode.trim().toUpperCase();
     if (code.length !== 6) {
-      Alert.alert('Invalid', 'Enter a valid 6-character doctor code');
+      Alert.alert(t('common.invalid'), 'Enter a valid 6-character doctor code');
       return;
     }
 
@@ -128,26 +143,13 @@ export default function ConnectionScreen(): React.JSX.Element {
       loadData();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to request';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     } finally {
       setRequesting(false);
     }
   };
 
   // Multi-step connection flow helpers
-  const loadClinics = useCallback(async (search?: string) => {
-    setLoadingClinics(true);
-    try {
-      const result = await ConnectionService.listClinics(search);
-      setClinics(result);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load clinics');
-      setClinics([]);
-    } finally {
-      setLoadingClinics(false);
-    }
-  }, []);
-
   const loadDoctorsForHospital = async (clinicId: string) => {
     setLoadingDoctors(true);
     try {
@@ -170,14 +172,14 @@ export default function ConnectionScreen(): React.JSX.Element {
 
     // Verify code matches selected doctor
     if (doctorCode.trim().toUpperCase() !== selectedDoctor.doctorCode.toUpperCase()) {
-      Alert.alert('Invalid Code', 'The code you entered does not match the selected doctor. Please check and try again.');
+      Alert.alert(t('common.invalid'), 'The code you entered does not match the selected doctor. Please check and try again.');
       return;
     }
 
     setRequesting(true);
     try {
       await ConnectionService.requestToJoin(doctorCode);
-      Alert.alert('Success', 'Your connection request has been sent to the doctor. You will be notified once approved.');
+      Alert.alert(t('common.success'), 'Your connection request has been sent to the doctor. You will be notified once approved.');
 
       // Reset state
       setDoctorCode('');
@@ -189,7 +191,7 @@ export default function ConnectionScreen(): React.JSX.Element {
       loadData();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to send request';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     } finally {
       setRequesting(false);
     }
@@ -207,15 +209,15 @@ export default function ConnectionScreen(): React.JSX.Element {
       loadData();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to accept';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     }
   };
 
   const handleReject = (requestId: string) => {
     Alert.alert('Reject Request', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Reject',
+        text: t('connection.reject'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -223,7 +225,7 @@ export default function ConnectionScreen(): React.JSX.Element {
             loadData();
           } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Failed to reject';
-            Alert.alert('Error', msg);
+            Alert.alert(t('common.error'), msg);
           }
         },
       },
@@ -231,19 +233,19 @@ export default function ConnectionScreen(): React.JSX.Element {
   };
 
   const handleDisconnect = (memberId: string, memberName: string) => {
-    Alert.alert('Disconnect', `Remove ${memberName} from your clinic?`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('connection.disconnect'), `Remove ${memberName} from your clinic?`, [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Disconnect',
+        text: t('connection.disconnect'),
         style: 'destructive',
         onPress: async () => {
           try {
             await ConnectionService.disconnectAssistant(memberId);
-            Alert.alert('Done', `${memberName} has been disconnected`);
+            Alert.alert(t('common.done'), `${memberName} has been disconnected`);
             loadData();
           } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Failed to disconnect';
-            Alert.alert('Error', msg);
+            Alert.alert(t('common.error'), msg);
           }
         },
       },
@@ -297,7 +299,7 @@ export default function ConnectionScreen(): React.JSX.Element {
 
         {/* Invite by Phone */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Invite Assistant</Text>
+          <Text style={styles.sectionTitle}>{t('connection.inviteAssistant')}</Text>
           <View style={styles.inputRow}>
             <TextInput
               style={styles.inputFlex}

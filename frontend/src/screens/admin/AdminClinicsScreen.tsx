@@ -4,6 +4,7 @@ import {
   RefreshControl, Alert, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
@@ -15,18 +16,19 @@ export default function AdminClinicsScreen(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const load = useCallback(async () => {
     try {
       const r = await fetchAdminClinics({ search: search.trim() || undefined, limit: 200 });
       setClinics(r.clinics);
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to load clinics');
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.failedLoadClinics'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search]);
+  }, [search, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -34,7 +36,7 @@ export default function AdminClinicsScreen(): React.JSX.Element {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Clinics</Text>
+        <Text style={styles.headerTitle}>{t('admin.clinics')}</Text>
       </View>
 
       <View style={styles.controls}>
@@ -42,7 +44,7 @@ export default function AdminClinicsScreen(): React.JSX.Element {
           <Ionicons name="search" size={16} color={COLORS.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search clinic name"
+            placeholder={t('admin.searchClinics')}
             placeholderTextColor={COLORS.textLight}
             value={search}
             onChangeText={setSearch}
@@ -66,19 +68,19 @@ export default function AdminClinicsScreen(): React.JSX.Element {
                 <View style={styles.cardHeader}>
                   <Text style={styles.name}>{item.name}</Text>
                   {solo ? (
-                    <View style={styles.soloBadge}><Text style={styles.soloBadgeText}>SOLO</Text></View>
+                    <View style={styles.soloBadge}><Text style={styles.soloBadgeText}>{t('admin.solo')}</Text></View>
                   ) : null}
                 </View>
                 {item.address ? <Text style={styles.address}>{item.address}</Text> : null}
                 <View style={styles.metrics}>
-                  <Metric label="Doctors" value={item.doctorCount} />
-                  <Metric label="Assistants" value={item.assistantCount} />
-                  <Metric label="Rx" value={item.prescriptionCount} />
+                  <Metric label={t('admin.doctors')} value={item.doctorCount} />
+                  <Metric label={t('admin.assistants')} value={item.assistantCount} />
+                  <Metric label={t('admin.rx')} value={item.prescriptionCount} />
                 </View>
               </View>
             );
           }}
-          ListEmptyComponent={<Text style={styles.empty}>No clinics found.</Text>}
+          ListEmptyComponent={<Text style={styles.empty}>{t('admin.noClinics')}</Text>}
         />
       )}
     </View>

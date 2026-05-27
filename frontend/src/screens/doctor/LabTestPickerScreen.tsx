@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { usePrescriptionStore } from '../../store/usePrescriptionStore';
@@ -34,6 +35,7 @@ interface SelectedLabTest {
 type LabTestPickerScreenProps = NativeStackScreenProps<DoctorStackParamList, 'LabTestPicker'>;
 
 export default function LabTestPickerScreen({ navigation }: LabTestPickerScreenProps): React.JSX.Element {
+  const { t } = useTranslation();
   const addLabTest = usePrescriptionStore((s) => s.addLabTest);
 
   const [query, setQuery] = useState('');
@@ -167,7 +169,7 @@ export default function LabTestPickerScreen({ navigation }: LabTestPickerScreenP
 
   const handleAddCustomTest = async () => {
     if (!customName.trim()) {
-      Alert.alert('Required', 'Please enter test name.');
+      Alert.alert(t('common.required'), 'Please enter test name.');
       return;
     }
 
@@ -183,7 +185,7 @@ export default function LabTestPickerScreen({ navigation }: LabTestPickerScreenP
       navigation.goBack();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to add custom test';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     }
   };
 
@@ -339,7 +341,7 @@ export default function LabTestPickerScreen({ navigation }: LabTestPickerScreenP
             ))}
           </ScrollView>
 
-          <Text style={styles.fieldLabel}>Notes (optional)</Text>
+          <Text style={styles.fieldLabel}>{t('consult.notes')} ({t('common.optional')})</Text>
           <TextInput
             style={styles.textInputField}
             placeholder="Any specific instructions..."

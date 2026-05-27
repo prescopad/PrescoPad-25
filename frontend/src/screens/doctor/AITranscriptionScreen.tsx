@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Audio } from 'expo-av';
 import { DoctorStackParamList } from '../../types/navigation.types';
@@ -25,6 +26,7 @@ const MAX_DURATION_MS = 30 * 60 * 1000; // 30 minutes hard cap
 const EXTEND_MS = 60 * 1000;            // +1 minute extension
 
 export default function AITranscriptionScreen({ navigation, route }: Props): React.JSX.Element {
+  const { t } = useTranslation();
   const { queueItem, patient } = route.params;
 
   // ── State ───────────────────────────────────────────────────────────────────
@@ -73,7 +75,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
   const _handleTimeUp = () => {
     _stopTimer();
     Alert.alert(
-      'Time limit reached',
+      t('ai.timeUp'),
       'Recording time is up. Do you want to extend by 1 minute or stop and process?',
       [
         { text: 'Extend +1 min', onPress: handleExtend },
@@ -98,7 +100,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
-        Alert.alert('Permission required', 'Microphone access is needed to record consultations.');
+        Alert.alert(t('ai.permissionRequired'), t('ai.micPermission'));
         return;
       }
 
@@ -162,9 +164,9 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       'Discard recording?',
       'This will delete the current recording and go back.',
       [
-        { text: 'Cancel' },
+        { text: t('common.cancel') },
         {
-          text: 'Discard',
+          text: t('ai.discard'),
           style: 'destructive',
           onPress: async () => {
             _stopTimer();
@@ -210,9 +212,9 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       (a.medicines.length ? filled : empty).push(`Medicines (${a.medicines.length})`);
       (a.lab_tests.length ? filled : empty).push(`Lab tests (${a.lab_tests.length})`);
       Alert.alert(
-        'AI extraction complete',
-        `Extracted: ${filled.length ? filled.join(', ') : 'nothing'}\n` +
-        `Left empty (you'll fill manually): ${empty.length ? empty.join(', ') : 'nothing'}`,
+        t('ai.extractionComplete'),
+        t('ai.extracted', { fields: filled.length ? filled.join(', ') : t('ai.nothing') }) + '\n' +
+        t('ai.leftEmpty', { fields: empty.length ? empty.join(', ') : t('ai.nothing') }),
       );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Processing failed';
@@ -267,10 +269,9 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       <View style={styles.micCircle}>
         <Ionicons name="mic" size={48} color={COLORS.white} />
       </View>
-      <Text style={styles.idleTitle}>Ready to record</Text>
+      <Text style={styles.idleTitle}>{t('ai.readyToRecord')}</Text>
       <Text style={styles.idleSubtitle}>
-        Tap start to begin recording the consultation.{'\n'}
-        The AI will transcribe and extract prescription details automatically.
+        {t('ai.readyHint')}
       </Text>
       <View style={styles.durationRow}>
         {[3, 5, 10, 15].map((min) => (
@@ -287,7 +288,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       </View>
       <TouchableOpacity style={styles.startBtn} onPress={handleStart}>
         <Ionicons name="mic" size={20} color={COLORS.white} />
-        <Text style={styles.startBtnText}>Start Recording</Text>
+        <Text style={styles.startBtnText}>{t('ai.startRecording')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -316,18 +317,18 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       <View style={styles.controlsRow}>
         <TouchableOpacity style={styles.controlBtn} onPress={handleDiscard}>
           <Ionicons name="trash-outline" size={22} color={COLORS.error} />
-          <Text style={[styles.controlLabel, { color: COLORS.error }]}>Discard</Text>
+          <Text style={[styles.controlLabel, { color: COLORS.error }]}>{t('ai.discard')}</Text>
         </TouchableOpacity>
 
         {recordingState === 'recording' ? (
           <TouchableOpacity style={[styles.controlBtn, styles.controlBtnPrimary]} onPress={handlePause}>
             <Ionicons name="pause" size={22} color={COLORS.white} />
-            <Text style={[styles.controlLabel, { color: COLORS.white }]}>Pause</Text>
+            <Text style={[styles.controlLabel, { color: COLORS.white }]}>{t('ai.pause')}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={[styles.controlBtn, styles.controlBtnPrimary]} onPress={handleResume}>
             <Ionicons name="play" size={22} color={COLORS.white} />
-            <Text style={[styles.controlLabel, { color: COLORS.white }]}>Resume</Text>
+            <Text style={[styles.controlLabel, { color: COLORS.white }]}>{t('ai.resume')}</Text>
           </TouchableOpacity>
         )}
 
@@ -361,7 +362,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
   const renderProcessing = () => (
     <View style={styles.centeredSection}>
       <ActivityIndicator size="large" color={COLORS.primary} />
-      <Text style={styles.processingTitle}>Analyzing consultation…</Text>
+      <Text style={styles.processingTitle}>{t('ai.processing')}</Text>
       <Text style={styles.processingSubtitle}>
         Transcribing audio → identifying speakers → extracting prescription data
       </Text>
@@ -376,10 +377,10 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
           <Text style={styles.cardTitle}>Extracted Prescription Data</Text>
 
           {autofill.diagnosis ? (
-            <InfoRow icon="medical" label="Diagnosis" value={autofill.diagnosis} />
+            <InfoRow icon="medical" label={t('consult.diagnosis')} value={autofill.diagnosis} />
           ) : null}
           {autofill.advice ? (
-            <InfoRow icon="chatbubble-outline" label="Advice" value={autofill.advice} />
+            <InfoRow icon="chatbubble-outline" label={t('consult.advice')} value={autofill.advice} />
           ) : null}
           {autofill.follow_up_date ? (
             <InfoRow icon="calendar-outline" label="Follow-up" value={autofill.follow_up_date} />
@@ -387,7 +388,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
 
           {autofill.medicines.length > 0 && (
             <>
-              <Text style={styles.sectionLabel}>Medicines ({autofill.medicines.length})</Text>
+              <Text style={styles.sectionLabel}>{t('consult.medicines')} ({autofill.medicines.length})</Text>
               {autofill.medicines.map((m, i) => (
                 <View key={i} style={styles.medRow}>
                   <Ionicons name="medkit-outline" size={14} color={COLORS.primary} />
@@ -405,7 +406,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
 
           {autofill.lab_tests.length > 0 && (
             <>
-              <Text style={styles.sectionLabel}>Lab Tests ({autofill.lab_tests.length})</Text>
+              <Text style={styles.sectionLabel}>{t('consult.labTests')} ({autofill.lab_tests.length})</Text>
               {autofill.lab_tests.map((t, i) => (
                 <View key={i} style={styles.medRow}>
                   <Ionicons name="flask-outline" size={14} color={COLORS.primary} />

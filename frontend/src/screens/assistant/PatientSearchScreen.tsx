@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -25,6 +26,7 @@ import type { AssistantStackParamList } from '../../types/navigation.types';
 type NavigationProp = NativeStackNavigationProp<AssistantStackParamList>;
 
 export default function PatientSearchScreen(): React.JSX.Element {
+  const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
   const { searchPatients, searchResults, clearSearch, isLoading } =
     usePatientStore();
@@ -84,23 +86,23 @@ export default function PatientSearchScreen(): React.JSX.Element {
 
   const handleLongPress = (patient: Patient) => {
     Alert.alert(
-      'Add to Queue',
+      t('queue.addToQueue'),
       `Add ${patient.name} to today's queue?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Add to Queue',
+          text: t('queue.addToQueue'),
           onPress: async () => {
             if (!user) return;
             try {
               await addToQueue(patient.id, user.id);
-              Alert.alert('Success', `${patient.name} added to queue.`);
+              Alert.alert(t('common.success'), `${patient.name} added to queue.`);
             } catch (error: unknown) {
               const message =
                 error instanceof Error
                   ? error.message
                   : 'Failed to add to queue';
-              Alert.alert('Error', message);
+              Alert.alert(t('common.error'), message);
             }
           },
         },
@@ -115,7 +117,7 @@ export default function PatientSearchScreen(): React.JSX.Element {
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) return 'Today';
+    if (diffDays === 0) return t('common.today');
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;

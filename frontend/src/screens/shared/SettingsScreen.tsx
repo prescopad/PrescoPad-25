@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,16 @@ import {
   StatusBar,
   Alert,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ParamListBase } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { APP_CONFIG } from '../../constants/config';
 import { useAuthStore } from '../../store/useAuthStore';
+import { SUPPORTED_LANGUAGES, setAppLanguage, getCurrentLanguage, LanguageCode } from '../../i18n';
 
 interface MenuItem {
   icon: keyof typeof Ionicons.glyphMap;
@@ -30,6 +33,18 @@ interface SettingsScreenProps {
 
 export default function SettingsScreen({ navigation }: SettingsScreenProps): React.JSX.Element {
   const { user, logout } = useAuthStore();
+  const { t } = useTranslation();
+  const [langModalVisible, setLangModalVisible] = useState(false);
+  const [currentLang, setCurrentLang] = useState<LanguageCode>(getCurrentLanguage());
+
+  const handleSelectLanguage = async (code: LanguageCode) => {
+    await setAppLanguage(code);
+    setCurrentLang(code);
+    setLangModalVisible(false);
+  };
+
+  const currentLangNative =
+    SUPPORTED_LANGUAGES.find((l) => l.code === currentLang)?.native ?? 'English';
 
   const initials = user?.name
     ? user.name
@@ -42,12 +57,12 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps): Rea
 
   const handleLogout = () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      t('settings.logout'),
+      t('settings.logoutConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Logout',
+          text: t('settings.logout'),
           style: 'destructive',
           onPress: () => {
             logout();
@@ -60,14 +75,14 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps): Rea
   const menuItems: MenuItem[] = [
     {
       icon: 'business-outline',
-      label: 'Clinic Details',
+      label: t('settings.clinicProfile'),
       subtitle: 'Manage clinic and doctor information',
       onPress: () => navigation.navigate('ClinicProfile'),
       showArrow: true,
     },
     {
       icon: 'medical-outline',
-      label: 'Manage Medicines & Tests',
+      label: t('settings.medicinesTests'),
       subtitle: 'Add or remove custom medicines and lab tests',
       onPress: () => navigation.navigate('MedicineTestManagement'),
       color: COLORS.success,
@@ -75,14 +90,21 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps): Rea
     },
     {
       icon: 'sync-outline',
-      label: 'Clinic Connection',
+      label: t('settings.connection'),
       subtitle: 'Connect doctor and assistant devices',
       onPress: () => navigation.navigate('ConnectionSettings'),
       showArrow: true,
     },
     {
+      icon: 'language-outline',
+      label: t('settings.language'),
+      subtitle: currentLangNative,
+      onPress: () => setLangModalVisible(true),
+      showArrow: true,
+    },
+    {
       icon: 'information-circle-outline',
-      label: 'About PrescoPad',
+      label: t('settings.about'),
       subtitle: `Version ${APP_CONFIG.version}`,
       onPress: () => {
         Alert.alert(
@@ -94,7 +116,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps): Rea
     },
     {
       icon: 'log-out-outline',
-      label: 'Logout',
+      label: t('settings.logout'),
       subtitle: 'Sign out of your account',
       onPress: handleLogout,
       color: COLORS.error,
@@ -140,7 +162,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps): Rea
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={styles.headerTitle}>{t('settings.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -159,7 +181,11 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps): Rea
                 color={COLORS.primary}
               />
               <Text style={styles.roleText}>
-                {user?.role === 'doctor' ? 'Doctor' : 'Assistant'}
+                {user?.role === 'doctor'
+                  ? t('settings.doctor')
+                  : user?.role === 'admin'
+                    ? t('settings.admin')
+                    : t('settings.assistant')}
               </Text>
             </View>
             <Text style={styles.phoneText}>{user?.phone || ''}</Text>
@@ -176,6 +202,43 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps): Rea
           {APP_CONFIG.name} v{APP_CONFIG.version}
         </Text>
       </ScrollView>
+
+      {/* Language picker */}
+      <Modal
+        visible={langModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLangModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setLangModalVisible(false)}
+        >
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>{t('settings.chooseLanguage')}</Text>
+            {SUPPORTED_LANGUAGES.map((lang) => {
+              const selected = lang.code === currentLang;
+              return (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={[styles.langRow, selected && styles.langRowSelected]}
+                  onPress={() => handleSelectLanguage(lang.code)}
+                  activeOpacity={0.7}
+                >
+                  <View>
+                    <Text style={[styles.langNative, selected && styles.langNativeSelected]}>
+                      {lang.native}
+                    </Text>
+                    <Text style={styles.langLabel}>{lang.label}</Text>
+                  </View>
+                  {selected && <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -315,5 +378,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textLight,
     marginTop: SPACING.xxl,
+  },
+
+  // Language modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    paddingBottom: SPACING.xxxl,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: SPACING.lg,
+  },
+  langRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
+  },
+  langRowSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySurface,
+  },
+  langNative: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  langNativeSelected: {
+    color: COLORS.primary,
+  },
+  langLabel: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
   },
 });

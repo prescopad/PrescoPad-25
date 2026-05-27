@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../../services/api';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -26,6 +27,7 @@ import { DoctorStackParamList } from '../../types/navigation.types';
 type DoctorDashboardProps = NativeStackScreenProps<DoctorStackParamList, 'DoctorDashboard'>;
 
 export default function DoctorDashboard({ navigation }: DoctorDashboardProps): React.JSX.Element {
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const clinic = useClinicStore((s) => s.clinic);
   const doctorProfile = useClinicStore((s) => s.doctorProfile);
@@ -82,7 +84,7 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
       return;
     }
     if (!item.patient) {
-      Alert.alert('Error', 'Patient data not available for this queue item');
+      Alert.alert(t('common.error'), 'Patient data not available for this queue item');
       return;
     }
     if (item.status === QueueStatus.IN_PROGRESS) {
@@ -94,7 +96,7 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
       navigation.navigate('Consult', { queueItem: item, patient: item.patient });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to start consultation';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     }
   };
 
@@ -119,13 +121,13 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
   const getStatusLabel = (status: QueueStatus): string => {
     switch (status) {
       case QueueStatus.WAITING:
-        return 'Waiting';
+        return t('queue.waiting');
       case QueueStatus.IN_PROGRESS:
-        return 'In Progress';
+        return t('queue.inProgress');
       case QueueStatus.COMPLETED:
-        return 'Completed';
+        return t('queue.completed');
       case QueueStatus.CANCELLED:
-        return 'Cancelled';
+        return t('queue.cancelled');
       default:
         return status;
     }
@@ -213,7 +215,7 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
             <Ionicons name="people-outline" size={18} color={COLORS.primary} />
           </View>
           <Text style={styles.statValue}>{stats.total}</Text>
-          <Text style={styles.statLabel}>Today</Text>
+          <Text style={styles.statLabel}>{t('common.today')}</Text>
         </View>
 
         <View style={styles.statCard}>
@@ -221,7 +223,7 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
             <Ionicons name="time-outline" size={18} color={COLORS.warning} />
           </View>
           <Text style={styles.statValue}>{stats.waiting}</Text>
-          <Text style={styles.statLabel}>Waiting</Text>
+          <Text style={styles.statLabel}>{t('queue.waiting')}</Text>
         </View>
 
         <View style={styles.statCard}>
@@ -239,17 +241,17 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
           <Text style={styles.statValue}>
             {APP_CONFIG.wallet.currencySymbol}{balance}
           </Text>
-          <Text style={styles.statLabel}>Wallet</Text>
+          <Text style={styles.statLabel}>{t('wallet.title')}</Text>
         </View>
       </View>
 
       {/* Queue Title + History Toggle */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Patient Queue</Text>
+        <Text style={styles.sectionTitle}>{t('queue.title')}</Text>
         <TouchableOpacity style={styles.historyToggle} onPress={handleToggleHistory}>
           <Ionicons name={showAllHistory ? 'calendar' : 'time-outline'} size={16} color={COLORS.primary} />
           <Text style={styles.historyToggleText}>
-            {showAllHistory ? 'All History' : 'Today'}
+            {showAllHistory ? 'All History' : t('common.today')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -257,10 +259,10 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
       {/* Filter Tabs */}
       <View style={styles.filterRow}>
         {([
-          { key: 'all' as const, label: 'All', count: stats.total },
-          { key: 'waiting' as const, label: 'Waiting', count: stats.waiting },
-          { key: 'in_progress' as const, label: 'In Progress', count: stats.inProgress },
-          { key: 'completed' as const, label: 'Done', count: stats.completed },
+          { key: 'all' as const, label: t('common.all'), count: stats.total },
+          { key: 'waiting' as const, label: t('queue.waiting'), count: stats.waiting },
+          { key: 'in_progress' as const, label: t('queue.inProgress'), count: stats.inProgress },
+          { key: 'completed' as const, label: t('queue.completed'), count: stats.completed },
         ]).map((tab) => (
           <TouchableOpacity
             key={tab.key}
@@ -287,9 +289,9 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
       <View style={styles.emptyIconCircle}>
         <Ionicons name="people-outline" size={48} color={COLORS.textLight} />
       </View>
-      <Text style={styles.emptyTitle}>No patients in queue</Text>
+      <Text style={styles.emptyTitle}>{t('queue.empty')}</Text>
       <Text style={styles.emptySubtitle}>
-        Patients added by your assistant will appear here
+        {t('queue.emptyHint')}
       </Text>
     </View>
   );
@@ -301,7 +303,7 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
       {isLoading && queueItems.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading queue...</Text>
+          <Text style={styles.loadingText}>{t('common.loading')}</Text>
         </View>
       ) : (
         <FlatList

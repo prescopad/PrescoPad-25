@@ -14,6 +14,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ParamListBase } from '@react-navigation/native';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
@@ -29,6 +30,7 @@ interface WalletScreenProps {
 }
 
 export default function WalletScreen({ navigation }: WalletScreenProps): React.JSX.Element {
+  const { t } = useTranslation();
   const {
     balance,
     transactions,
@@ -77,7 +79,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
 
   const handleRecharge = async (amount: number) => {
     if (amount <= 0) {
-      Alert.alert('Invalid', 'Please enter a valid amount');
+      Alert.alert(t('common.invalid'), 'Please enter a valid amount');
       return;
     }
 
@@ -87,10 +89,10 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
       await loadTransactions();
       setShowRecharge(false);
       setCustomAmount('');
-      Alert.alert('Success', `${APP_CONFIG.wallet.currencySymbol}${amount} added to your wallet`);
+      Alert.alert(t('common.success'), `${APP_CONFIG.wallet.currencySymbol}${amount} added to your wallet`);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Recharge failed. Please try again.';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     } finally {
       setIsRecharging(false);
     }
@@ -104,7 +106,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
       Alert.alert('Saved', 'Auto-refill settings updated');
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to update auto-refill';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     }
   };
 
@@ -162,7 +164,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Wallet</Text>
+        <Text style={styles.headerTitle}>{t('wallet.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -206,7 +208,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
             activeOpacity={0.8}
           >
             <Ionicons name="add-circle" size={20} color={COLORS.white} />
-            <Text style={styles.rechargeToggleText}>Recharge</Text>
+            <Text style={styles.rechargeToggleText}>{t('wallet.recharge')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -251,7 +253,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
                 {isRecharging ? (
                   <ActivityIndicator color={COLORS.white} size="small" />
                 ) : (
-                  <Text style={styles.customRechargeBtnText}>Recharge</Text>
+                  <Text style={styles.customRechargeBtnText}>{t('wallet.recharge')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -264,7 +266,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
           {transactions.length === 0 ? (
             <View style={styles.emptyTxn}>
               <Ionicons name="receipt-outline" size={40} color={COLORS.textLight} />
-              <Text style={styles.emptyTxnText}>No transactions yet</Text>
+              <Text style={styles.emptyTxnText}>{t('wallet.noTransactions')}</Text>
             </View>
           ) : (
             transactions.map((txn) => (

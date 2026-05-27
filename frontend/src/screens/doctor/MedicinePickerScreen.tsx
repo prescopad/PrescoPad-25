@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { usePrescriptionStore } from '../../store/usePrescriptionStore';
@@ -34,6 +35,7 @@ import { DoctorStackParamList } from '../../types/navigation.types';
 type MedicinePickerScreenProps = NativeStackScreenProps<DoctorStackParamList, 'MedicinePicker'>;
 
 export default function MedicinePickerScreen({ navigation }: MedicinePickerScreenProps): React.JSX.Element {
+  const { t } = useTranslation();
   const addMedicine = usePrescriptionStore((s) => s.addMedicine);
 
   const [query, setQuery] = useState('');
@@ -111,15 +113,15 @@ export default function MedicinePickerScreen({ navigation }: MedicinePickerScree
     if (!selectedMedicine) return;
 
     if (!frequency) {
-      Alert.alert('Required', 'Please select a frequency.');
+      Alert.alert(t('common.required'),'Please select a frequency.');
       return;
     }
     if (!duration) {
-      Alert.alert('Required', 'Please select a duration.');
+      Alert.alert(t('common.required'),'Please select a duration.');
       return;
     }
     if (!timing) {
-      Alert.alert('Required', 'Please select timing.');
+      Alert.alert(t('common.required'),'Please select timing.');
       return;
     }
 
@@ -153,19 +155,19 @@ export default function MedicinePickerScreen({ navigation }: MedicinePickerScree
 
   const handleAddCustomMedicine = async () => {
     if (!customName.trim()) {
-      Alert.alert('Required', 'Please enter medicine name.');
+      Alert.alert(t('common.required'),'Please enter medicine name.');
       return;
     }
     if (!frequency) {
-      Alert.alert('Required', 'Please select a frequency.');
+      Alert.alert(t('common.required'),'Please select a frequency.');
       return;
     }
     if (!duration) {
-      Alert.alert('Required', 'Please select a duration.');
+      Alert.alert(t('common.required'),'Please select a duration.');
       return;
     }
     if (!timing) {
-      Alert.alert('Required', 'Please select timing.');
+      Alert.alert(t('common.required'),'Please select timing.');
       return;
     }
 
@@ -185,7 +187,7 @@ export default function MedicinePickerScreen({ navigation }: MedicinePickerScree
       navigation.goBack();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to add custom medicine';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     }
   };
 
@@ -291,16 +293,16 @@ export default function MedicinePickerScreen({ navigation }: MedicinePickerScree
         </>
       )}
 
-      <Text style={styles.fieldLabel}>Frequency *</Text>
+      <Text style={styles.fieldLabel}>{t('consult.frequency')} *</Text>
       {renderOptionChips(FREQUENCY_OPTIONS, frequency, setFrequency)}
 
-      <Text style={styles.fieldLabel}>Duration *</Text>
+      <Text style={styles.fieldLabel}>{t('consult.duration')} *</Text>
       {renderOptionChips(DURATION_OPTIONS, duration, setDuration)}
 
-      <Text style={styles.fieldLabel}>Timing *</Text>
+      <Text style={styles.fieldLabel}>{t('consult.timing')} *</Text>
       {renderOptionChips(TIMING_OPTIONS, timing, setTiming)}
 
-      <Text style={styles.fieldLabel}>Notes (optional)</Text>
+      <Text style={styles.fieldLabel}>{t('consult.notes')} ({t('common.optional')})</Text>
       <TextInput
         style={styles.textInputField}
         placeholder="Any special instructions..."
@@ -315,7 +317,7 @@ export default function MedicinePickerScreen({ navigation }: MedicinePickerScree
         activeOpacity={0.8}
       >
         <Ionicons name="add-circle" size={20} color={COLORS.white} />
-        <Text style={styles.addMedicineButtonText}>Add Medicine</Text>
+        <Text style={styles.addMedicineButtonText}>{t('consult.addMedicine')}</Text>
       </TouchableOpacity>
     </View>
   );

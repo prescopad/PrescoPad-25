@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { sendOTP } from '../../services/authService';
@@ -13,17 +14,18 @@ import { AuthStackParamList } from '../../types/navigation.types';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation, route }: Props): React.JSX.Element {
+  const { t } = useTranslation();
   const role = route.params.role;
   const [phone, setPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const isDoctor = role === 'doctor';
-  const title = isDoctor ? 'Doctor Login' : 'Assistant Login';
+  const title = isDoctor ? t('auth.doctorLogin') : t('auth.assistantLogin');
   const icon = isDoctor ? 'medkit' : 'people';
 
   const handleSendOTP = async () => {
     if (phone.length !== 10) {
-      Alert.alert('Invalid', 'Please enter a valid 10-digit phone number');
+      Alert.alert(t('common.invalid'), t('auth.invalidPhone'));
       return;
     }
 
@@ -32,8 +34,8 @@ export default function LoginScreen({ navigation, route }: Props): React.JSX.Ele
       await sendOTP(phone, role as UserRole);
       navigation.navigate('OTP', { phone, role });
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to send OTP';
-      Alert.alert('Error', msg);
+      const msg = error instanceof Error ? error.message : t('auth.failedSendOtp');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setIsLoading(false);
     }
@@ -56,13 +58,13 @@ export default function LoginScreen({ navigation, route }: Props): React.JSX.Ele
         </View>
 
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>Enter your phone number to receive OTP</Text>
+        <Text style={styles.subtitle}>{t('auth.enterPhoneSubtitle')}</Text>
 
         <View style={styles.inputContainer}>
           <Text style={styles.countryCode}>+91</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter phone number"
+            placeholder={t('auth.enterPhoneShort')}
             placeholderTextColor={COLORS.textLight}
             value={phone}
             onChangeText={(text) => setPhone(text.replace(/[^0-9]/g, '').slice(0, 10))}
@@ -81,7 +83,7 @@ export default function LoginScreen({ navigation, route }: Props): React.JSX.Ele
           {isLoading ? (
             <ActivityIndicator color={COLORS.white} />
           ) : (
-            <Text style={styles.buttonText}>Send OTP</Text>
+            <Text style={styles.buttonText}>{t('auth.sendOtp')}</Text>
           )}
         </TouchableOpacity>
 

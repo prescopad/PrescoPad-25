@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { APP_CONFIG } from '../../constants/config';
@@ -9,6 +10,7 @@ import { AuthStackParamList } from '../../types/navigation.types';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Landing'>;
 
 export default function LandingScreen({ navigation }: Props): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
@@ -20,7 +22,7 @@ export default function LandingScreen({ navigation }: Props): React.JSX.Element 
       </View>
 
       <View style={styles.bottomSection}>
-        <Text style={styles.prompt}>I am a...</Text>
+        <Text style={styles.prompt}>{t('auth.iAmPrompt')}</Text>
 
         <TouchableOpacity
           style={styles.roleButton}
@@ -31,8 +33,8 @@ export default function LandingScreen({ navigation }: Props): React.JSX.Element 
             <Ionicons name="medkit" size={28} color={COLORS.white} />
           </View>
           <View style={styles.roleTextContainer}>
-            <Text style={styles.roleTitle}>Doctor</Text>
-            <Text style={styles.roleSubtitle}>Prescribe, sign & manage clinic</Text>
+            <Text style={styles.roleTitle}>{t('auth.doctor')}</Text>
+            <Text style={styles.roleSubtitle}>{t('auth.doctorDesc')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} />
         </TouchableOpacity>
@@ -46,8 +48,8 @@ export default function LandingScreen({ navigation }: Props): React.JSX.Element 
             <Ionicons name="people" size={28} color={COLORS.white} />
           </View>
           <View style={styles.roleTextContainer}>
-            <Text style={styles.roleTitle}>Assistant / Nurse</Text>
-            <Text style={styles.roleSubtitle}>Register patients & manage queue</Text>
+            <Text style={styles.roleTitle}>{t('auth.assistantNurse')}</Text>
+            <Text style={styles.roleSubtitle}>{t('auth.assistantDesc')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} />
         </TouchableOpacity>
