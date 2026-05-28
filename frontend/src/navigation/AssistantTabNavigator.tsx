@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { COLORS } from '../constants/theme';
 
 // Assistant screens
@@ -54,6 +55,7 @@ function AssistantSettingsStack(): React.JSX.Element {
 }
 
 export default function AssistantTabNavigator(): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -80,17 +82,17 @@ export default function AssistantTabNavigator(): React.JSX.Element {
       <Tab.Screen
         name="AssistantQueue"
         component={AssistantQueueStack}
-        options={{ tabBarLabel: 'Queue' }}
+        options={{ tabBarLabel: t('nav.queue') }}
       />
       <Tab.Screen
         name="AddPatient"
         component={AssistantPatientStack}
-        options={{ tabBarLabel: 'Add Patient' }}
+        options={{ tabBarLabel: t('nav.addPatient') }}
       />
       <Tab.Screen
         name="AssistantSettings"
         component={AssistantSettingsStack}
-        options={{ tabBarLabel: 'Settings' }}
+        options={{ tabBarLabel: t('nav.settings') }}
       />
     </Tab.Navigator>
   );

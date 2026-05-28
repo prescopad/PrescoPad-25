@@ -146,7 +146,7 @@ export default function LabTestPickerScreen({ navigation }: LabTestPickerScreenP
 
   const handleAddTests = async () => {
     if (selectedTests.size === 0) {
-      Alert.alert('No Tests Selected', 'Please select at least one lab test.');
+      Alert.alert(t('labTest.noTestsSelected'), t('labTest.selectAtLeastOne'));
       return;
     }
 

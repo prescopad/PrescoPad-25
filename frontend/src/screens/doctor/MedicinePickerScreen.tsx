@@ -112,19 +112,8 @@ export default function MedicinePickerScreen({ navigation }: MedicinePickerScree
   const handleAddMedicine = async () => {
     if (!selectedMedicine) return;
 
-    if (!frequency) {
-      Alert.alert(t('common.required'),'Please select a frequency.');
-      return;
-    }
-    if (!duration) {
-      Alert.alert(t('common.required'),'Please select a duration.');
-      return;
-    }
-    if (!timing) {
-      Alert.alert(t('common.required'),'Please select timing.');
-      return;
-    }
-
+    // frequency / duration / timing are optional — doctor can add them later
+    // or write the medicine without them.
     addMedicine({
       medicineName: selectedMedicine.name,
       type: selectedMedicine.type,
@@ -158,18 +147,7 @@ export default function MedicinePickerScreen({ navigation }: MedicinePickerScree
       Alert.alert(t('common.required'),'Please enter medicine name.');
       return;
     }
-    if (!frequency) {
-      Alert.alert(t('common.required'),'Please select a frequency.');
-      return;
-    }
-    if (!duration) {
-      Alert.alert(t('common.required'),'Please select a duration.');
-      return;
-    }
-    if (!timing) {
-      Alert.alert(t('common.required'),'Please select timing.');
-      return;
-    }
+    // frequency / duration / timing are optional.
 
     try {
       const custom = await addCustomMedicine(customName.trim(), customType, customStrength);
@@ -293,13 +271,13 @@ export default function MedicinePickerScreen({ navigation }: MedicinePickerScree
         </>
       )}
 
-      <Text style={styles.fieldLabel}>{t('consult.frequency')} *</Text>
+      <Text style={styles.fieldLabel}>{t('consult.frequency')}</Text>
       {renderOptionChips(FREQUENCY_OPTIONS, frequency, setFrequency)}
 
-      <Text style={styles.fieldLabel}>{t('consult.duration')} *</Text>
+      <Text style={styles.fieldLabel}>{t('consult.duration')}</Text>
       {renderOptionChips(DURATION_OPTIONS, duration, setDuration)}
 
-      <Text style={styles.fieldLabel}>{t('consult.timing')} *</Text>
+      <Text style={styles.fieldLabel}>{t('consult.timing')}</Text>
       {renderOptionChips(TIMING_OPTIONS, timing, setTiming)}
 
       <Text style={styles.fieldLabel}>{t('consult.notes')} ({t('common.optional')})</Text>

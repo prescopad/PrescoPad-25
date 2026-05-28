@@ -1,18 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { COLORS, SPACING } from '../constants/theme';
 
 export default function NetworkBanner(): React.JSX.Element | null {
   const isConnected = useNetworkStatus();
+  const { t } = useTranslation();
 
   if (isConnected) return null;
 
   return (
     <View style={styles.banner}>
       <Ionicons name="cloud-offline-outline" size={16} color={COLORS.white} />
-      <Text style={styles.text}>No internet connection</Text>
+      <Text style={styles.text}>{t('common.noConnection')}</Text>
     </View>
   );
 }

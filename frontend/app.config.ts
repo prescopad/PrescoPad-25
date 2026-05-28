@@ -4,6 +4,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'PrescoPad',
   slug: 'PrescoPad',
+  plugins: [
+    ...(config.plugins ?? []),
+    '@react-native-community/datetimepicker',
+    [
+      'expo-image-picker',
+      {
+        photosPermission: 'PrescoPad needs photo access so the doctor can upload a digital signature.',
+      },
+    ],
+  ],
   extra: {
     ...config.extra,
     // Only set backendUrl when BACKEND_URL is explicitly provided (e.g. EAS

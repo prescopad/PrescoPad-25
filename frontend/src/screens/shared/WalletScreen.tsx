@@ -79,7 +79,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
 
   const handleRecharge = async (amount: number) => {
     if (amount <= 0) {
-      Alert.alert(t('common.invalid'), 'Please enter a valid amount');
+      Alert.alert(t('common.invalid'), t('wallet.invalidAmount'));
       return;
     }
 
@@ -89,9 +89,9 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
       await loadTransactions();
       setShowRecharge(false);
       setCustomAmount('');
-      Alert.alert(t('common.success'), `${APP_CONFIG.wallet.currencySymbol}${amount} added to your wallet`);
+      Alert.alert(t('common.success'), t('wallet.addedToWallet', { currency: APP_CONFIG.wallet.currencySymbol, amount }));
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Recharge failed. Please try again.';
+      const msg = error instanceof Error ? error.message : t('common.somethingWrong');
       Alert.alert(t('common.error'), msg);
     } finally {
       setIsRecharging(false);
@@ -103,9 +103,9 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
       const threshold = parseInt(autoRefillThreshold, 10) || APP_CONFIG.wallet.lowBalanceThreshold;
       const amount = parseInt(autoRefillAmount, 10) || APP_CONFIG.wallet.defaultRechargeAmount;
       await walletService.updateAutoRefill(autoRefill, amount, threshold);
-      Alert.alert('Saved', 'Auto-refill settings updated');
+      Alert.alert(t('common.success'), t('wallet.autoRefillSaved'));
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to update auto-refill';
+      const msg = error instanceof Error ? error.message : t('common.somethingWrong');
       Alert.alert(t('common.error'), msg);
     }
   };
@@ -185,7 +185,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
           <View style={styles.balanceCardInner}>
             <View style={styles.balanceHeader}>
               <Ionicons name="wallet" size={24} color={COLORS.white} />
-              <Text style={styles.balanceLabel}>Current Balance</Text>
+              <Text style={styles.balanceLabel}>{t('wallet.currentBalance')}</Text>
             </View>
             <Text style={styles.balanceAmount}>
               {APP_CONFIG.wallet.currencySymbol}{balance.toFixed(2)}
@@ -197,7 +197,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
             <View style={styles.lowBalanceWarning}>
               <Ionicons name="warning" size={16} color={COLORS.warning} />
               <Text style={styles.lowBalanceText}>
-                Low balance! Recharge to continue issuing prescriptions.
+                {t('wallet.lowBalanceWarning')}
               </Text>
             </View>
           ) : null}
@@ -215,7 +215,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
         {/* Recharge Options */}
         {showRecharge ? (
           <View style={styles.rechargeSection}>
-            <Text style={styles.rechargeSectionTitle}>Select Amount</Text>
+            <Text style={styles.rechargeSectionTitle}>{t('wallet.selectAmount')}</Text>
             <View style={styles.rechargeOptions}>
               {RECHARGE_OPTIONS.map((amount) => (
                 <TouchableOpacity
@@ -235,7 +235,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
             <View style={styles.customAmountRow}>
               <TextInput
                 style={styles.customAmountInput}
-                placeholder="Custom amount"
+                placeholder={t('wallet.customAmount')}
                 placeholderTextColor={COLORS.textLight}
                 value={customAmount}
                 onChangeText={(text) => setCustomAmount(text.replace(/[^0-9]/g, ''))}
@@ -262,7 +262,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
 
         {/* Transaction History */}
         <View style={styles.txnSection}>
-          <Text style={styles.txnSectionTitle}>Transaction History</Text>
+          <Text style={styles.txnSectionTitle}>{t('wallet.transactionHistory')}</Text>
           {transactions.length === 0 ? (
             <View style={styles.emptyTxn}>
               <Ionicons name="receipt-outline" size={40} color={COLORS.textLight} />
@@ -279,13 +279,13 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
 
         {/* Auto-Refill Settings */}
         <View style={styles.autoRefillSection}>
-          <Text style={styles.txnSectionTitle}>Auto-Refill</Text>
+          <Text style={styles.txnSectionTitle}>{t('wallet.autoRefillTitle')}</Text>
           <View style={styles.autoRefillCard}>
             <View style={styles.autoRefillToggleRow}>
               <View style={styles.autoRefillInfo}>
-                <Text style={styles.autoRefillLabel}>Enable Auto-Refill</Text>
+                <Text style={styles.autoRefillLabel}>{t('wallet.enableAutoRefill')}</Text>
                 <Text style={styles.autoRefillDesc}>
-                  Automatically recharge when balance is low
+                  {t('wallet.autoRefillDesc')}
                 </Text>
               </View>
               <Switch
@@ -300,7 +300,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
               <>
                 <View style={styles.autoRefillInputRow}>
                   <Text style={styles.autoRefillInputLabel}>
-                    Threshold ({APP_CONFIG.wallet.currencySymbol})
+                    {t('wallet.thresholdLabel', { currency: APP_CONFIG.wallet.currencySymbol })}
                   </Text>
                   <TextInput
                     style={styles.autoRefillInput}
@@ -313,7 +313,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
                 </View>
                 <View style={styles.autoRefillInputRow}>
                   <Text style={styles.autoRefillInputLabel}>
-                    Refill Amount ({APP_CONFIG.wallet.currencySymbol})
+                    {t('wallet.refillAmountLabel', { currency: APP_CONFIG.wallet.currencySymbol })}
                   </Text>
                   <TextInput
                     style={styles.autoRefillInput}
@@ -329,7 +329,7 @@ export default function WalletScreen({ navigation }: WalletScreenProps): React.J
                   onPress={handleAutoRefillSave}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.saveAutoRefillBtnText}>Save Settings</Text>
+                  <Text style={styles.saveAutoRefillBtnText}>{t('wallet.saveSettings')}</Text>
                 </TouchableOpacity>
               </>
             ) : null}

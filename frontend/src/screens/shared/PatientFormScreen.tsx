@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { Patient, Gender, BLOOD_GROUPS, PatientFormData } from '../../types/patient.types';
 import { getPatientById, updatePatient } from '../../services/dataService';
@@ -15,6 +16,7 @@ type EditRouteProp = RouteProp<DoctorStackParamList, 'EditPatient'>;
 export default function PatientFormScreen(): React.JSX.Element {
   const navigation = useNavigation();
   const route = useRoute<EditRouteProp>();
+  const { t } = useTranslation();
   const { patientId } = route.params;
 
   const [isLoading, setIsLoading] = useState(true);
@@ -45,7 +47,7 @@ export default function PatientFormScreen(): React.JSX.Element {
         });
       }
     } catch {
-      Alert.alert('Error', 'Failed to load patient');
+      Alert.alert(t('common.error'), t('patient.loadFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -53,23 +55,23 @@ export default function PatientFormScreen(): React.JSX.Element {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      Alert.alert('Required', 'Patient name is required');
+      Alert.alert(t('common.required'), t('patient.nameRequired'));
       return;
     }
     if (!form.age.trim() || parseInt(form.age) <= 0) {
-      Alert.alert('Required', 'Please enter a valid age');
+      Alert.alert(t('common.required'), t('patient.ageRequired'));
       return;
     }
 
     setIsSaving(true);
     try {
       await updatePatient(patientId, form);
-      Alert.alert('Saved', 'Patient information updated', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      Alert.alert(t('common.success'), t('patient.savedInfo'), [
+        { text: t('common.ok'), onPress: () => navigation.goBack() },
       ]);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to save';
-      Alert.alert('Error', msg);
+      const msg = error instanceof Error ? error.message : t('common.somethingWrong');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setIsSaving(false);
     }
@@ -100,7 +102,7 @@ export default function PatientFormScreen(): React.JSX.Element {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Patient</Text>
+        <Text style={styles.headerTitle}>{t('patient.editPatient')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -111,12 +113,12 @@ export default function PatientFormScreen(): React.JSX.Element {
       >
         {/* Name */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Name *</Text>
+          <Text style={styles.label}>{t('patient.nameLabel')}</Text>
           <TextInput
             style={styles.input}
             value={form.name}
             onChangeText={(v) => updateField('name', v)}
-            placeholder="Patient name"
+            placeholder={t('patient.patientNamePlaceholder')}
             placeholderTextColor={COLORS.textLight}
           />
         </View>
@@ -124,19 +126,19 @@ export default function PatientFormScreen(): React.JSX.Element {
         {/* Age & Gender Row */}
         <View style={styles.row}>
           <View style={[styles.inputGroup, styles.rowHalf]}>
-            <Text style={styles.label}>Age *</Text>
+            <Text style={styles.label}>{t('patient.ageLabel')}</Text>
             <TextInput
               style={styles.input}
               value={form.age}
               onChangeText={(v) => updateField('age', v)}
-              placeholder="Age"
+              placeholder={t('patient.age')}
               placeholderTextColor={COLORS.textLight}
               keyboardType="numeric"
               maxLength={3}
             />
           </View>
           <View style={[styles.inputGroup, styles.rowHalf]}>
-            <Text style={styles.label}>Gender *</Text>
+            <Text style={styles.label}>{t('patient.genderLabel')}</Text>
             <View style={styles.genderRow}>
               {(['male', 'female', 'other'] as Gender[]).map((g) => (
                 <TouchableOpacity
@@ -156,23 +158,23 @@ export default function PatientFormScreen(): React.JSX.Element {
         {/* Weight & Phone Row */}
         <View style={styles.row}>
           <View style={[styles.inputGroup, styles.rowHalf]}>
-            <Text style={styles.label}>Weight (kg)</Text>
+            <Text style={styles.label}>{t('patient.weightLabel')}</Text>
             <TextInput
               style={styles.input}
               value={form.weight}
               onChangeText={(v) => updateField('weight', v)}
-              placeholder="e.g. 65"
+              placeholder={t('patient.weightPlaceholder')}
               placeholderTextColor={COLORS.textLight}
               keyboardType="numeric"
             />
           </View>
           <View style={[styles.inputGroup, styles.rowHalf]}>
-            <Text style={styles.label}>Phone</Text>
+            <Text style={styles.label}>{t('patient.phoneLabel')}</Text>
             <TextInput
               style={styles.input}
               value={form.phone}
               onChangeText={(v) => updateField('phone', v)}
-              placeholder="Phone number"
+              placeholder={t('patient.phonePlaceholder')}
               placeholderTextColor={COLORS.textLight}
               keyboardType="phone-pad"
               maxLength={10}
@@ -182,7 +184,7 @@ export default function PatientFormScreen(): React.JSX.Element {
 
         {/* Blood Group */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Blood Group</Text>
+          <Text style={styles.label}>{t('patient.bloodGroupLabel')}</Text>
           <View style={styles.bloodGroupRow}>
             {BLOOD_GROUPS.map((bg) => (
               <TouchableOpacity
@@ -200,12 +202,12 @@ export default function PatientFormScreen(): React.JSX.Element {
 
         {/* Address */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Address</Text>
+          <Text style={styles.label}>{t('patient.addressLabel')}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={form.address}
             onChangeText={(v) => updateField('address', v)}
-            placeholder="Patient address"
+            placeholder={t('patient.addressPlaceholder')}
             placeholderTextColor={COLORS.textLight}
             multiline
             numberOfLines={2}
@@ -214,12 +216,12 @@ export default function PatientFormScreen(): React.JSX.Element {
 
         {/* Allergies */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Allergies</Text>
+          <Text style={styles.label}>{t('patient.allergiesLabel')}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={form.allergies}
             onChangeText={(v) => updateField('allergies', v)}
-            placeholder="Known allergies"
+            placeholder={t('patient.allergiesPlaceholder')}
             placeholderTextColor={COLORS.textLight}
             multiline
             numberOfLines={2}
@@ -238,7 +240,7 @@ export default function PatientFormScreen(): React.JSX.Element {
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={22} color={COLORS.white} />
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+              <Text style={styles.saveButtonText}>{t('patient.saveChanges')}</Text>
             </>
           )}
         </TouchableOpacity>

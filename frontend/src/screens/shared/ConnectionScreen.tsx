@@ -71,7 +71,7 @@ export default function ConnectionScreen(): React.JSX.Element {
       const result = await ConnectionService.listClinics(search);
       setClinics(result);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load clinics');
+      Alert.alert(t('common.error'), 'Failed to load clinics');
       setClinics([]);
     } finally {
       setLoadingClinics(false);
@@ -103,25 +103,25 @@ export default function ConnectionScreen(): React.JSX.Element {
   const handleCopyCode = async () => {
     if (user?.doctorCode) {
       await Clipboard.setStringAsync(user.doctorCode);
-      Alert.alert('Copied', 'Doctor code copied to clipboard');
+      Alert.alert(t('common.done'), t('connection.codeCopied'));
     }
   };
 
   const handleInvite = async () => {
     const phone = invitePhone.trim().replace(/\D/g, '');
     if (phone.length < 10) {
-      Alert.alert(t('common.invalid'), 'Enter a valid 10-digit phone number');
+      Alert.alert(t('common.invalid'), t('connection.enterValidPhone'));
       return;
     }
 
     setInviting(true);
     try {
       await ConnectionService.inviteAssistant(phone);
-      Alert.alert('Sent', 'Invitation sent to assistant');
+      Alert.alert(t('common.success'), t('connection.invitationSent'));
       setInvitePhone('');
       loadData();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to invite';
+      const msg = error instanceof Error ? error.message : t('connection.inviteSent');
       Alert.alert(t('common.error'), msg);
     } finally {
       setInviting(false);
@@ -131,18 +131,18 @@ export default function ConnectionScreen(): React.JSX.Element {
   const handleRequestToJoin = async () => {
     const code = doctorCode.trim().toUpperCase();
     if (code.length !== 6) {
-      Alert.alert(t('common.invalid'), 'Enter a valid 6-character doctor code');
+      Alert.alert(t('common.invalid'), t('connection.enterValidCode'));
       return;
     }
 
     setRequesting(true);
     try {
       await ConnectionService.requestToJoin(code);
-      Alert.alert('Sent', 'Join request sent to doctor');
+      Alert.alert(t('common.success'), t('connection.joinRequestSent'));
       setDoctorCode('');
       loadData();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to request';
+      const msg = error instanceof Error ? error.message : t('connection.joinSent');
       Alert.alert(t('common.error'), msg);
     } finally {
       setRequesting(false);
@@ -159,8 +159,8 @@ export default function ConnectionScreen(): React.JSX.Element {
       setDoctorsInHospital(doctors);
     } catch (error) {
       console.error('Error loading doctors:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Failed to load doctors';
-      Alert.alert('Error', `Failed to load doctors: ${errorMsg}`);
+      const errorMsg = error instanceof Error ? error.message : t('common.somethingWrong');
+      Alert.alert(t('common.error'), t('connection.failedLoadDoctors', { error: errorMsg }));
       setDoctorsInHospital([]);
     } finally {
       setLoadingDoctors(false);
@@ -172,14 +172,14 @@ export default function ConnectionScreen(): React.JSX.Element {
 
     // Verify code matches selected doctor
     if (doctorCode.trim().toUpperCase() !== selectedDoctor.doctorCode.toUpperCase()) {
-      Alert.alert(t('common.invalid'), 'The code you entered does not match the selected doctor. Please check and try again.');
+      Alert.alert(t('common.invalid'), t('connection.enterCodeForDoctor', { name: selectedDoctor.name }));
       return;
     }
 
     setRequesting(true);
     try {
       await ConnectionService.requestToJoin(doctorCode);
-      Alert.alert(t('common.success'), 'Your connection request has been sent to the doctor. You will be notified once approved.');
+      Alert.alert(t('common.success'), t('connection.requestSentMessage'));
 
       // Reset state
       setDoctorCode('');
@@ -190,7 +190,7 @@ export default function ConnectionScreen(): React.JSX.Element {
 
       loadData();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to send request';
+      const msg = error instanceof Error ? error.message : t('common.somethingWrong');
       Alert.alert(t('common.error'), msg);
     } finally {
       setRequesting(false);
@@ -205,16 +205,16 @@ export default function ConnectionScreen(): React.JSX.Element {
       const session = await refreshSession();
       await setUser(session.user, session.accessToken, session.refreshToken);
 
-      Alert.alert('Connected', 'Connection established successfully');
+      Alert.alert(t('common.success'), t('connection.connectionEstablished'));
       loadData();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to accept';
+      const msg = error instanceof Error ? error.message : t('common.somethingWrong');
       Alert.alert(t('common.error'), msg);
     }
   };
 
   const handleReject = (requestId: string) => {
-    Alert.alert('Reject Request', 'Are you sure?', [
+    Alert.alert(t('connection.rejectRequest'), t('connection.areYouSure'), [
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('connection.reject'),
@@ -224,7 +224,7 @@ export default function ConnectionScreen(): React.JSX.Element {
             await ConnectionService.rejectRequest(requestId);
             loadData();
           } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : 'Failed to reject';
+            const msg = error instanceof Error ? error.message : t('common.somethingWrong');
             Alert.alert(t('common.error'), msg);
           }
         },
@@ -233,7 +233,7 @@ export default function ConnectionScreen(): React.JSX.Element {
   };
 
   const handleDisconnect = (memberId: string, memberName: string) => {
-    Alert.alert(t('connection.disconnect'), `Remove ${memberName} from your clinic?`, [
+    Alert.alert(t('connection.disconnect'), `${memberName}?`, [
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('connection.disconnect'),
@@ -241,10 +241,10 @@ export default function ConnectionScreen(): React.JSX.Element {
         onPress: async () => {
           try {
             await ConnectionService.disconnectAssistant(memberId);
-            Alert.alert(t('common.done'), `${memberName} has been disconnected`);
+            Alert.alert(t('common.done'), `${memberName} ${t('connection.connectionEstablished')}`);
             loadData();
           } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : 'Failed to disconnect';
+            const msg = error instanceof Error ? error.message : t('common.somethingWrong');
             Alert.alert(t('common.error'), msg);
           }
         },
@@ -269,7 +269,7 @@ export default function ConnectionScreen(): React.JSX.Element {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Team Connection</Text>
+        <Text style={styles.headerTitle}>{t('connection.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -288,12 +288,12 @@ export default function ConnectionScreen(): React.JSX.Element {
       <>
         {/* Doctor Code Card */}
         <View style={styles.codeCard}>
-          <Text style={styles.codeLabel}>Your Doctor Code</Text>
+          <Text style={styles.codeLabel}>{t('connection.yourDoctorCode')}</Text>
           <Text style={styles.codeValue}>{user?.doctorCode || '------'}</Text>
-          <Text style={styles.codeHint}>Share this code with your assistant to connect</Text>
+          <Text style={styles.codeHint}>{t('connection.shareCodeHint')}</Text>
           <TouchableOpacity style={styles.copyButton} onPress={handleCopyCode}>
             <Ionicons name="copy-outline" size={18} color={COLORS.white} />
-            <Text style={styles.copyButtonText}>Copy Code</Text>
+            <Text style={styles.copyButtonText}>{t('connection.copyCode')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -327,19 +327,19 @@ export default function ConnectionScreen(): React.JSX.Element {
         {/* Pending Requests */}
         {pendingRequests.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Pending Requests</Text>
+            <Text style={styles.sectionTitle}>{t('connection.pendingSection')}</Text>
             {pendingRequests.map(renderRequestCard)}
           </View>
         )}
 
         {/* Team Members */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Team</Text>
+          <Text style={styles.sectionTitle}>{t('connection.yourTeam')}</Text>
           {teamMembers.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="people-outline" size={40} color={COLORS.textLight} />
-              <Text style={styles.emptyText}>No team members yet</Text>
-              <Text style={styles.emptySubtext}>Invite an assistant using their phone number or share your code</Text>
+              <Text style={styles.emptyText}>{t('connection.noMembers')}</Text>
+              <Text style={styles.emptySubtext}>{t('connection.noTeamHint')}</Text>
             </View>
           ) : (
             teamMembers
@@ -360,8 +360,8 @@ export default function ConnectionScreen(): React.JSX.Element {
         <>
           <View style={styles.statusCard}>
             <Ionicons name="checkmark-circle" size={40} color={COLORS.success} />
-            <Text style={styles.statusTitle}>Connected</Text>
-            <Text style={styles.statusSubtitle}>Working with Dr. {connectedDoctor.name}</Text>
+            <Text style={styles.statusTitle}>{t('connection.connected')}</Text>
+            <Text style={styles.statusSubtitle}>{t('connection.workingWith', { name: connectedDoctor.name })}</Text>
             {connectedDoctor.specialty && (
               <Text style={styles.statusDetail}>{connectedDoctor.specialty}</Text>
             )}
@@ -386,21 +386,21 @@ export default function ConnectionScreen(): React.JSX.Element {
             <View style={[styles.progressCircle, connectionStep === 'select-hospital' && styles.progressCircleActive]}>
               <Text style={[styles.progressNumber, connectionStep === 'select-hospital' && styles.progressNumberActive]}>1</Text>
             </View>
-            <Text style={[styles.progressLabel, connectionStep === 'select-hospital' && styles.progressLabelActive]}>Hospital</Text>
+            <Text style={[styles.progressLabel, connectionStep === 'select-hospital' && styles.progressLabelActive]}>{t('queue.waiting')}</Text>
           </View>
           <View style={styles.progressLine} />
           <View style={styles.progressStep}>
             <View style={[styles.progressCircle, connectionStep === 'select-doctor' && styles.progressCircleActive]}>
               <Text style={[styles.progressNumber, connectionStep === 'select-doctor' && styles.progressNumberActive]}>2</Text>
             </View>
-            <Text style={[styles.progressLabel, connectionStep === 'select-doctor' && styles.progressLabelActive]}>Doctor</Text>
+            <Text style={[styles.progressLabel, connectionStep === 'select-doctor' && styles.progressLabelActive]}>{t('auth.doctor')}</Text>
           </View>
           <View style={styles.progressLine} />
           <View style={styles.progressStep}>
             <View style={[styles.progressCircle, connectionStep === 'verify-code' && styles.progressCircleActive]}>
               <Text style={[styles.progressNumber, connectionStep === 'verify-code' && styles.progressNumberActive]}>3</Text>
             </View>
-            <Text style={[styles.progressLabel, connectionStep === 'verify-code' && styles.progressLabelActive]}>Verify</Text>
+            <Text style={[styles.progressLabel, connectionStep === 'verify-code' && styles.progressLabelActive]}>{t('common.confirm')}</Text>
           </View>
         </View>
 
@@ -412,7 +412,7 @@ export default function ConnectionScreen(): React.JSX.Element {
         {/* Pending Requests */}
         {pendingRequests.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Pending Requests</Text>
+            <Text style={styles.sectionTitle}>{t('connection.pendingSection')}</Text>
             {pendingRequests.map(renderRequestCard)}
           </View>
         )}
@@ -423,8 +423,8 @@ export default function ConnectionScreen(): React.JSX.Element {
   function renderHospitalSelection() {
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.stepTitle}>Step 1: Select Hospital/Clinic</Text>
-        <Text style={styles.stepSubtitle}>Search for the hospital where you want to work</Text>
+        <Text style={styles.stepTitle}>{t('connection.selectHospital')}</Text>
+        <Text style={styles.stepSubtitle}>{t('connection.searchHospital')}</Text>
 
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={18} color={COLORS.textLight} />
@@ -432,7 +432,7 @@ export default function ConnectionScreen(): React.JSX.Element {
             style={styles.searchInput}
             value={clinicSearch}
             onChangeText={setClinicSearch}
-            placeholder="Search hospitals or clinics..."
+            placeholder={t('connection.searchHospitalPlaceholder')}
             placeholderTextColor={COLORS.textLight}
           />
           {clinicSearch.length > 0 && (
@@ -447,7 +447,7 @@ export default function ConnectionScreen(): React.JSX.Element {
         ) : clinics.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="business-outline" size={40} color={COLORS.textLight} />
-            <Text style={styles.emptyText}>No hospitals found</Text>
+            <Text style={styles.emptyText}>{t('connection.noHospitals')}</Text>
           </View>
         ) : (
           <View style={styles.listContainer}>
@@ -488,7 +488,7 @@ export default function ConnectionScreen(): React.JSX.Element {
           }}
           disabled={!selectedHospital}
         >
-          <Text style={styles.nextButtonText}>Next: Select Doctor</Text>
+          <Text style={styles.nextButtonText}>{t('connection.nextSelectDoctor')}</Text>
           <Ionicons name="arrow-forward" size={18} color={COLORS.white} />
         </TouchableOpacity>
       </View>
@@ -503,19 +503,19 @@ export default function ConnectionScreen(): React.JSX.Element {
           onPress={() => setConnectionStep('select-hospital')}
         >
           <Ionicons name="arrow-back" size={18} color={COLORS.primary} />
-          <Text style={styles.backButtonText}>Back to Hospital Selection</Text>
+          <Text style={styles.backButtonText}>{t('connection.backToHospital')}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.stepTitle}>Step 2: Select Doctor</Text>
-        <Text style={styles.stepSubtitle}>Doctors at {selectedHospital?.name}</Text>
+        <Text style={styles.stepTitle}>{t('connection.selectDoctor')}</Text>
+        <Text style={styles.stepSubtitle}>{t('connection.doctorsAt', { hospital: selectedHospital?.name })}</Text>
 
         {loadingDoctors ? (
           <ActivityIndicator style={styles.loader} color={COLORS.primary} />
         ) : doctorsInHospital.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="person-outline" size={40} color={COLORS.textLight} />
-            <Text style={styles.emptyText}>No doctors found at this hospital</Text>
-            <Text style={styles.emptySubtext}>Try selecting a different hospital</Text>
+            <Text style={styles.emptyText}>{t('connection.noDoctors')}</Text>
+            <Text style={styles.emptySubtext}>{t('connection.tryDifferentHospital')}</Text>
           </View>
         ) : (
           <View style={styles.listContainer}>
@@ -549,7 +549,7 @@ export default function ConnectionScreen(): React.JSX.Element {
           onPress={() => selectedDoctor && setConnectionStep('verify-code')}
           disabled={!selectedDoctor}
         >
-          <Text style={styles.nextButtonText}>Next: Verify Code</Text>
+          <Text style={styles.nextButtonText}>{t('connection.nextVerifyCode')}</Text>
           <Ionicons name="arrow-forward" size={18} color={COLORS.white} />
         </TouchableOpacity>
       </View>
@@ -564,18 +564,18 @@ export default function ConnectionScreen(): React.JSX.Element {
           onPress={() => setConnectionStep('select-doctor')}
         >
           <Ionicons name="arrow-back" size={18} color={COLORS.primary} />
-          <Text style={styles.backButtonText}>Back to Doctor Selection</Text>
+          <Text style={styles.backButtonText}>{t('connection.backToDoctorSelection')}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.stepTitle}>Step 3: Verify Doctor Code</Text>
-        <Text style={styles.stepSubtitle}>Enter the 6-character code provided by Dr. {selectedDoctor?.name}</Text>
+        <Text style={styles.stepTitle}>{t('connection.verifyCode')}</Text>
+        <Text style={styles.stepSubtitle}>{t('connection.enterCodeForDoctor', { name: selectedDoctor?.name })}</Text>
 
         <View style={styles.codeInputContainer}>
           <TextInput
             style={styles.codeInputLarge}
             value={doctorCode}
             onChangeText={(text) => setDoctorCode(text.toUpperCase())}
-            placeholder="ENTER CODE"
+            placeholder={t('connection.enterCodePlaceholder')}
             placeholderTextColor={COLORS.textLight}
             autoCapitalize="characters"
             maxLength={6}
@@ -586,12 +586,12 @@ export default function ConnectionScreen(): React.JSX.Element {
         <View style={styles.selectedInfoCard}>
           <View style={styles.selectedInfoRow}>
             <Ionicons name="business" size={16} color={COLORS.textMuted} />
-            <Text style={styles.selectedInfoLabel}>Hospital:</Text>
+            <Text style={styles.selectedInfoLabel}>{t('connection.hospitalLabel')}</Text>
             <Text style={styles.selectedInfoValue}>{selectedHospital?.name}</Text>
           </View>
           <View style={styles.selectedInfoRow}>
             <Ionicons name="person" size={16} color={COLORS.textMuted} />
-            <Text style={styles.selectedInfoLabel}>Doctor:</Text>
+            <Text style={styles.selectedInfoLabel}>{t('connection.doctorLabel')}</Text>
             <Text style={styles.selectedInfoValue}>Dr. {selectedDoctor?.name}</Text>
           </View>
         </View>
@@ -605,7 +605,7 @@ export default function ConnectionScreen(): React.JSX.Element {
             <ActivityIndicator color={COLORS.white} />
           ) : (
             <>
-              <Text style={styles.submitButtonText}>Send Connection Request</Text>
+              <Text style={styles.submitButtonText}>{t('connection.sendRequest')}</Text>
               <Ionicons name="send" size={18} color={COLORS.white} />
             </>
           )}
@@ -626,7 +626,7 @@ export default function ConnectionScreen(): React.JSX.Element {
           <View style={styles.requestHeader}>
             <View style={styles.requestBadge}>
               <Text style={styles.requestBadgeText}>
-                {isIncoming ? 'Incoming' : 'Sent'}
+                {isIncoming ? t('connection.incoming') : t('connection.sent')}
               </Text>
             </View>
             <Text style={styles.requestName}>{otherName || 'Unknown'}</Text>
@@ -693,7 +693,7 @@ export default function ConnectionScreen(): React.JSX.Element {
         )}
         {!isIncoming && (
           <View style={styles.pendingBadge}>
-            <Text style={styles.pendingBadgeText}>Waiting...</Text>
+            <Text style={styles.pendingBadgeText}>{t('connection.waiting')}</Text>
           </View>
         )}
       </View>
@@ -719,7 +719,7 @@ export default function ConnectionScreen(): React.JSX.Element {
           <View style={styles.memberInfo}>
             <Text style={styles.memberName}>{member.name}</Text>
             <Text style={styles.memberRole}>
-              {member.role === 'doctor' ? 'Doctor' : 'Assistant'} · {member.phone}
+              {member.role === 'doctor' ? t('settings.doctor') : t('settings.assistant')} · {member.phone}
             </Text>
           </View>
           {hasDetails && (

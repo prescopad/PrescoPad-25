@@ -11,6 +11,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { useWalletStore } from '../../store/useWalletStore';
 import { UserRole } from '../../types/auth.types';
 import { AuthStackParamList } from '../../types/navigation.types';
+import { useTranslation } from 'react-i18next';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'OTP'>;
 
@@ -18,6 +19,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 
 export default function OTPScreen({ navigation, route }: Props): React.JSX.Element {
   const { phone, role } = route.params;
+  const { t } = useTranslation();
   const [otp, setOtp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(RESEND_COOLDOWN_SECONDS);
@@ -35,7 +37,7 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
 
   const handleVerify = async () => {
     if (otp.length !== 6) {
-      Alert.alert('Invalid', 'Please enter the 6-digit OTP');
+      Alert.alert(t('common.invalid'), t('auth.invalidOtp'));
       return;
     }
 
@@ -51,8 +53,8 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
         loadBalance().catch(() => { /* silent */ });
       }
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'OTP verification failed';
-      Alert.alert('Error', msg);
+      const msg = error instanceof Error ? error.message : t('auth.otpVerificationFailed');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setIsLoading(false);
     }
@@ -66,10 +68,10 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
       setOtp('');
       inputRef.current?.focus();
-      Alert.alert('Sent', 'A new OTP has been sent to your phone.');
+      Alert.alert(t('common.success'), t('auth.otpResent'));
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Could not resend OTP';
-      Alert.alert('Error', msg);
+      const msg = error instanceof Error ? error.message : t('common.somethingWrong');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setIsResending(false);
     }
@@ -77,8 +79,8 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
 
   const resendDisabled = resendCountdown > 0 || isResending;
   const resendLabel = resendCountdown > 0
-    ? `Resend OTP in ${resendCountdown}s`
-    : (isResending ? 'Sending…' : "Didn't receive OTP? Resend");
+    ? t('auth.resendIn', { seconds: resendCountdown })
+    : (isResending ? t('auth.sending') : t('auth.resend'));
 
   return (
     <KeyboardAvoidingView
@@ -94,9 +96,9 @@ export default function OTPScreen({ navigation, route }: Props): React.JSX.Eleme
       <View style={styles.content}>
         <Ionicons name="shield-checkmark" size={48} color={COLORS.primary} />
 
-        <Text style={styles.title}>Verify OTP</Text>
+        <Text style={styles.title}>{t('auth.verifyOtp')}</Text>
         <Text style={styles.subtitle}>
-          Enter the 6-digit code sent to{'\n'}
+          {t('auth.otpSentTo')}{'\n'}
           <Text style={styles.phoneText}>+91 {phone}</Text>
         </Text>
 

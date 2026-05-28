@@ -15,6 +15,9 @@ export interface User {
   /** True when this user's clinic has no assistants — the doctor gains
    * AddPatient / PatientSearch / queue management capabilities. */
   soloMode?: boolean;
+  /** Cloudinary URL of the doctor's digital signature image (PNG/JPG).
+   * Embedded into prescription PDFs when present. */
+  signatureUrl?: string;
   createdAt: string;
 }
 

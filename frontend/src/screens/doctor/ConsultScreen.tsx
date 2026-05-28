@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { usePrescriptionStore } from '../../store/usePrescriptionStore';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -42,6 +43,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
   const aiApplied = usePrescriptionStore((s) => s.aiApplied);
   const [isCreating, setIsCreating] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Derived: which fields were left empty after AI applied?
   const missingDiagnosis   = aiApplied && !currentDraft.diagnosis.trim();
@@ -80,13 +82,44 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
   const handleDiagnosisChange = (text: string) => updateDraft({ diagnosis: text });
   const handleAdviceChange = (text: string) => updateDraft({ advice: text });
 
-  const handleFollowUpChange = (text: string) => {
-    const cleaned = text.replace(/[^0-9/]/g, '');
-    let formatted = cleaned;
-    if (cleaned.length === 2 && currentDraft.followUpDate.length < 3) formatted = cleaned + '/';
-    else if (cleaned.length === 5 && currentDraft.followUpDate.length < 6) formatted = cleaned + '/';
-    if (formatted.length <= 10) updateDraft({ followUpDate: formatted });
+  // Follow-up date is selected via a native calendar picker. The draft stores
+  // a DD/MM/YYYY string for display + backend compatibility; we round-trip via
+  // a Date when opening the picker and on selection.
+  const parseFollowUpToDate = (s: string): Date => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    // DD/MM/YYYY
+    const ddmmyyyy = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (ddmmyyyy) {
+      const [, dd, mm, yyyy] = ddmmyyyy;
+      const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+      if (!isNaN(d.getTime())) return d;
+    }
+    // YYYY-MM-DD (what the AI extraction emits)
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) {
+      const [, yyyy, mm, dd] = iso;
+      const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+      if (!isNaN(d.getTime())) return d;
+    }
+    return today;
   };
+
+  const formatDateISO = (d: Date): string => {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const handleDatePicked = (event: DateTimePickerEvent, selected?: Date) => {
+    // Android closes the dialog itself; iOS keeps the spinner open until tapped away.
+    setShowDatePicker(Platform.OS === 'ios');
+    if (event.type === 'dismissed' || !selected) return;
+    updateDraft({ followUpDate: formatDateISO(selected) });
+  };
+
+  const todayAtMidnight = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
 
   const handleAddMedicine = () => {
     navigation.navigate('MedicinePicker');
@@ -365,18 +398,30 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
             <Text style={styles.sectionTitle}>{t('consult.followUp')}</Text>
             {missingFollowUp && <MissingBadge />}
           </View>
-          <View style={[styles.followUpRow, missingFollowUp && styles.inputMissing]}>
+          <TouchableOpacity
+            style={[styles.followUpRow, missingFollowUp && styles.inputMissing]}
+            onPress={() => setShowDatePicker(true)}
+            activeOpacity={0.7}
+          >
             <Ionicons name="calendar-outline" size={20} color={missingFollowUp ? COLORS.warning : COLORS.textMuted} />
-            <TextInput
-              style={styles.followUpInput}
-              placeholder="DD/MM/YYYY"
-              placeholderTextColor={COLORS.textLight}
-              value={currentDraft.followUpDate}
-              onChangeText={handleFollowUpChange}
-              keyboardType="numeric"
-              maxLength={10}
+            <Text style={[styles.followUpInput, !currentDraft.followUpDate && { color: COLORS.textLight }]}>
+              {currentDraft.followUpDate || t('consult.pickDate')}
+            </Text>
+            {currentDraft.followUpDate ? (
+              <TouchableOpacity onPress={() => updateDraft({ followUpDate: '' })} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close-circle" size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ) : null}
+          </TouchableOpacity>
+          {showDatePicker && (
+            <DateTimePicker
+              value={parseFollowUpToDate(currentDraft.followUpDate)}
+              mode="date"
+              minimumDate={todayAtMidnight}
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={handleDatePicked}
             />
-          </View>
+          )}
         </View>
 
         {/* Spacer for bottom button */}

@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -13,10 +12,8 @@ import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { APP_CONFIG } from '../../constants/config';
 import { usePrescriptionStore } from '../../store/usePrescriptionStore';
 import { useWalletStore } from '../../store/useWalletStore';
-import { useClinicStore } from '../../store/useClinicStore';
-import { buildShareText } from '../../services/pdfService';
-import { shareViaWhatsApp, shareViaPDF, shareViaSMS } from '../../services/shareService';
-import { Prescription } from '../../types/prescription.types';
+import { useTranslation } from 'react-i18next';
+import PrescriptionActions from '../../components/PrescriptionActions';
 import { DoctorStackParamList } from '../../types/navigation.types';
 
 type Props = NativeStackScreenProps<DoctorStackParamList, 'RxSuccess'>;
@@ -25,40 +22,7 @@ export default function RxSuccessScreen({ navigation, route }: Props): React.JSX
   const prescription = route.params.prescription;
   const { resetDraft } = usePrescriptionStore();
   const { balance } = useWalletStore();
-  const { doctorProfile } = useClinicStore();
-
-  const handleShareWhatsApp = async () => {
-    try {
-      const text = buildShareText(prescription, doctorProfile);
-      await shareViaWhatsApp(text, prescription.patientPhone);
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Could not open WhatsApp';
-      Alert.alert('Error', msg);
-    }
-  };
-
-  const handleSharePDF = async () => {
-    try {
-      if (!prescription.pdfPath) {
-        Alert.alert('Error', 'PDF not available');
-        return;
-      }
-      await shareViaPDF(prescription.pdfPath);
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Could not share PDF';
-      Alert.alert('Error', msg);
-    }
-  };
-
-  const handleShareSMS = async () => {
-    try {
-      const text = buildShareText(prescription, doctorProfile);
-      await shareViaSMS(text, prescription.patientPhone);
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Could not open SMS';
-      Alert.alert('Error', msg);
-    }
-  };
+  const { t } = useTranslation();
 
   const handleBackToQueue = () => {
     resetDraft();
@@ -77,7 +41,7 @@ export default function RxSuccessScreen({ navigation, route }: Props): React.JSX
           </View>
         </View>
 
-        <Text style={styles.title}>Prescription Issued!</Text>
+        <Text style={styles.title}>{t('prescription.issued')}</Text>
 
         <Text style={styles.rxId}>
           {prescription.id}
@@ -98,36 +62,10 @@ export default function RxSuccessScreen({ navigation, route }: Props): React.JSX
           </View>
         </View>
 
-        {/* Share Buttons */}
+        {/* Share / Download / Print */}
         <View style={styles.shareSection}>
-          <Text style={styles.shareTitle}>Share Prescription</Text>
-
-          <TouchableOpacity
-            style={[styles.shareButton, styles.whatsappButton]}
-            onPress={handleShareWhatsApp}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="logo-whatsapp" size={22} color={COLORS.white} />
-            <Text style={styles.shareButtonText}>Share via WhatsApp</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.shareButton, styles.pdfButton]}
-            onPress={handleSharePDF}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="document-outline" size={22} color={COLORS.white} />
-            <Text style={styles.shareButtonText}>Share as PDF</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.shareButton, styles.smsButton]}
-            onPress={handleShareSMS}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="chatbubble-outline" size={22} color={COLORS.white} />
-            <Text style={styles.shareButtonText}>Share via SMS</Text>
-          </TouchableOpacity>
+          <Text style={styles.shareTitle}>{t('prescription.title')}</Text>
+          <PrescriptionActions prescription={prescription} layout="column" />
         </View>
       </View>
 
@@ -139,7 +77,7 @@ export default function RxSuccessScreen({ navigation, route }: Props): React.JSX
           activeOpacity={0.8}
         >
           <Ionicons name="arrow-back" size={20} color={COLORS.primary} />
-          <Text style={styles.backButtonText}>Back to Queue</Text>
+          <Text style={styles.backButtonText}>{t('prescription.backToQueue')}</Text>
         </TouchableOpacity>
       </View>
     </View>

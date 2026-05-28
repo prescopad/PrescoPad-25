@@ -70,6 +70,10 @@ class UpdateProfileRequest(BaseModel):
     experienceYears: Optional[int] = None
     address: Optional[str] = None
     city: Optional[str] = None
+    # URL of the doctor's digital signature image (Cloudinary-hosted).
+    # Empty string clears the signature.
+    signature_url: Optional[str] = None
+    signatureUrl: Optional[str] = None
 
     def normalized(self) -> dict:
         d = {}
@@ -89,4 +93,7 @@ class UpdateProfileRequest(BaseModel):
             d["address"] = self.address
         if self.city is not None:
             d["city"] = self.city
+        sig = self.signature_url if self.signature_url is not None else self.signatureUrl
+        if sig is not None:
+            d["signature_url"] = sig
         return d

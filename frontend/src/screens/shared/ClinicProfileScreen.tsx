@@ -8,6 +8,7 @@ import {
   StatusBar,
   Alert,
   ScrollView,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -15,9 +16,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ParamListBase } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { useClinicStore } from '../../store/useClinicStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { uploadImageToCloudinary } from '../../services/cloudinaryService';
+import { updateProfile as updateAuthProfile } from '../../services/authService';
 
 interface ClinicProfileScreenProps {
   navigation: NativeStackNavigationProp<ParamListBase>;
@@ -36,6 +41,7 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
 
   const { user } = useAuthStore();
   const isDoctor = user?.role === 'doctor';
+  const { t } = useTranslation();
 
   const [clinicName, setClinicName] = useState('');
   const [address, setAddress] = useState('');
@@ -45,6 +51,73 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
   const [specialty, setSpecialty] = useState('');
   const [regNumber, setRegNumber] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Digital signature (Cloudinary URL) — lives on the authenticated user record.
+  const [signatureUrl, setSignatureUrl] = useState<string>(user?.signatureUrl || '');
+  const [isUploadingSig, setIsUploadingSig] = useState(false);
+
+  useEffect(() => {
+    setSignatureUrl(user?.signatureUrl || '');
+  }, [user?.signatureUrl]);
+
+  const handlePickSignature = async () => {
+    if (!isDoctor) return;
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(t('common.error'), t('signature.permission'));
+        return;
+      }
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 1],
+        quality: 0.9,
+      });
+      if (picked.canceled || !picked.assets?.[0]?.uri) return;
+
+      setIsUploadingSig(true);
+      const uploaded = await uploadImageToCloudinary(picked.assets[0].uri, {
+        filename: `sig_${user?.id || 'doctor'}.jpg`,
+      });
+      // Persist on backend.
+      const updatedUser = await updateAuthProfile({ signatureUrl: uploaded.secure_url });
+      // Mirror into auth store so PDFs pick it up immediately.
+      const auth = useAuthStore.getState();
+      if (auth.accessToken && auth.refreshToken) {
+        await auth.setUser(updatedUser, auth.accessToken, auth.refreshToken);
+      }
+      setSignatureUrl(uploaded.secure_url);
+      Alert.alert(t('common.success'), t('signature.saved'));
+    } catch (e) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('signature.uploadFailed'));
+    } finally {
+      setIsUploadingSig(false);
+    }
+  };
+
+  const handleRemoveSignature = async () => {
+    if (!isDoctor) return;
+    Alert.alert(t('signature.removeTitle'), t('signature.removeConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('common.delete'),
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const updatedUser = await updateAuthProfile({ signatureUrl: '' });
+            const auth = useAuthStore.getState();
+            if (auth.accessToken && auth.refreshToken) {
+              await auth.setUser(updatedUser, auth.accessToken, auth.refreshToken);
+            }
+            setSignatureUrl('');
+          } catch (e) {
+            Alert.alert(t('common.error'), e instanceof Error ? e.message : t('common.somethingWrong'));
+          }
+        },
+      },
+    ]);
+  };
 
   useEffect(() => {
     loadClinic();
@@ -70,11 +143,11 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
 
   const handleSave = async () => {
     if (!clinicName.trim()) {
-      Alert.alert('Required', 'Clinic name is required');
+      Alert.alert(t('common.required'), t('clinicProfile.clinicNameRequired'));
       return;
     }
     if (!doctorName.trim()) {
-      Alert.alert('Required', 'Doctor name is required');
+      Alert.alert(t('common.required'), t('clinicProfile.doctorNameRequired'));
       return;
     }
 
@@ -93,12 +166,12 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
         regNumber: regNumber.trim(),
       });
 
-      Alert.alert('Saved', 'Clinic profile updated successfully', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      Alert.alert(t('common.success'), t('clinicProfile.savedSuccess'), [
+        { text: t('common.ok'), onPress: () => navigation.goBack() },
       ]);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to save profile';
-      Alert.alert('Error', msg);
+      const msg = error instanceof Error ? error.message : t('common.somethingWrong');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setIsSaving(false);
     }
@@ -241,6 +314,58 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
               />
             </View>
           </View>
+
+          {/* Digital Signature (doctor only) */}
+          {isDoctor && (
+            <>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="create-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.sectionTitle}>{t('signature.title')}</Text>
+              </View>
+              <View style={styles.card}>
+                <Text style={[styles.label, { marginBottom: SPACING.sm }]}>{t('signature.hint')}</Text>
+                {signatureUrl ? (
+                  <View style={styles.sigPreviewBox}>
+                    <Image source={{ uri: signatureUrl }} style={styles.sigPreviewImage} resizeMode="contain" />
+                  </View>
+                ) : (
+                  <View style={[styles.sigPreviewBox, styles.sigPreviewEmpty]}>
+                    <Ionicons name="image-outline" size={32} color={COLORS.textLight} />
+                    <Text style={styles.sigPreviewEmptyText}>{t('signature.noneYet')}</Text>
+                  </View>
+                )}
+                <View style={styles.sigButtonRow}>
+                  <TouchableOpacity
+                    style={[styles.sigButton, isUploadingSig && styles.buttonDisabled]}
+                    onPress={handlePickSignature}
+                    disabled={isUploadingSig}
+                    activeOpacity={0.7}
+                  >
+                    {isUploadingSig ? (
+                      <ActivityIndicator color={COLORS.white} />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-upload-outline" size={18} color={COLORS.white} />
+                        <Text style={styles.sigButtonText}>
+                          {signatureUrl ? t('signature.replace') : t('signature.upload')}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  {signatureUrl ? (
+                    <TouchableOpacity
+                      style={styles.sigRemoveBtn}
+                      onPress={handleRemoveSignature}
+                      disabled={isUploadingSig}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            </>
+          )}
         </ScrollView>
 
         {/* Save Button - Only for doctors */}
@@ -405,5 +530,58 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+
+  // Signature card
+  sigPreviewBox: {
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surfaceSecondary,
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    marginBottom: SPACING.md,
+  },
+  sigPreviewEmpty: {
+    borderStyle: 'dashed',
+  },
+  sigPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  sigPreviewEmptyText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: SPACING.xs,
+  },
+  sigButtonRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  sigButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary,
+  },
+  sigButtonText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  sigRemoveBtn: {
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.error,
+    backgroundColor: COLORS.errorLight,
   },
 });

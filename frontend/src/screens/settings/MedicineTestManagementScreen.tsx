@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ParamListBase } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { Medicine, LabTest } from '../../types/medicine.types';
 import api from '../../services/api';
@@ -25,6 +26,7 @@ interface MedicineTestManagementScreenProps {
 }
 
 export default function MedicineTestManagementScreen({ navigation }: MedicineTestManagementScreenProps): React.JSX.Element {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'medicines' | 'tests'>('medicines');
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [tests, setTests] = useState<LabTest[]>([]);
@@ -71,7 +73,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
       }));
       setMedicines(mapped);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load medicines');
+      Alert.alert(t('common.error'), error.message || t('manage.loadFailed', { type: t('manage.medicines') }));
     }
   };
 
@@ -87,7 +89,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
       }));
       setTests(mapped);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load lab tests');
+      Alert.alert(t('common.error'), error.message || t('manage.loadFailed', { type: t('manage.labTests') }));
     }
   };
 
@@ -99,7 +101,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
 
   const handleAddMedicine = async () => {
     if (!formName.trim()) {
-      Alert.alert('Error', 'Medicine name is required');
+      Alert.alert(t('common.error'), t('manage.nameRequired', { type: t('manage.medicineName') }));
       return;
     }
 
@@ -110,12 +112,12 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
         type: formType,
         strength: formStrength.trim(),
       });
-      Alert.alert('Success', 'Medicine added successfully');
+      Alert.alert(t('common.success'), t('manage.addedSuccess', { type: t('manage.medicineName') }));
       setShowAddModal(false);
       resetForm();
       await loadMedicines();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to add medicine');
+      Alert.alert(t('common.error'), error.message || t('manage.addFailed', { type: t('manage.medicineName') }));
     } finally {
       setSubmitting(false);
     }
@@ -123,7 +125,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
 
   const handleAddTest = async () => {
     if (!formName.trim()) {
-      Alert.alert('Error', 'Test name is required');
+      Alert.alert(t('common.error'), t('manage.nameRequired', { type: t('manage.testName') }));
       return;
     }
 
@@ -133,12 +135,12 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
         name: formName.trim(),
         category: formCategory,
       });
-      Alert.alert('Success', 'Lab test added successfully');
+      Alert.alert(t('common.success'), t('manage.addedSuccess', { type: t('manage.testName') }));
       setShowAddModal(false);
       resetForm();
       await loadTests();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to add lab test');
+      Alert.alert(t('common.error'), error.message || t('manage.addFailed', { type: t('manage.testName') }));
     } finally {
       setSubmitting(false);
     }
@@ -146,19 +148,19 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
 
   const handleDeleteMedicine = (id: string, name: string) => {
     Alert.alert(
-      'Delete Medicine',
-      `Are you sure you want to delete "${name}"?`,
+      t('manage.deleteMedicine'),
+      t('manage.deleteConfirm', { name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await api.delete(`/data/custom-medicines/${id}`);
               await loadMedicines();
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete medicine');
+              Alert.alert(t('common.error'), error.message || t('manage.deleteFailed', { type: t('manage.medicineName') }));
             }
           },
         },
@@ -168,19 +170,19 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
 
   const handleDeleteTest = (id: string, name: string) => {
     Alert.alert(
-      'Delete Lab Test',
-      `Are you sure you want to delete "${name}"?`,
+      t('manage.deleteTest'),
+      t('manage.deleteConfirm', { name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await api.delete(`/data/custom-lab-tests/${id}`);
               await loadTests();
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete lab test');
+              Alert.alert(t('common.error'), error.message || t('manage.deleteFailed', { type: t('manage.testName') }));
             }
           },
         },
@@ -216,7 +218,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
         <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.name}</Text>
           <Text style={styles.itemDetails}>
-            {item.type}{item.strength ? ` • ${item.strength}` : ''} • Used {item.usageCount} times
+            {item.type}{item.strength ? ` • ${item.strength}` : ''} • {t('manage.usedTimes', { count: item.usageCount })}
           </Text>
         </View>
       </View>
@@ -238,7 +240,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
         <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.name}</Text>
           <Text style={styles.itemDetails}>
-            {item.category} • Used {item.usageCount} times
+            {item.category} • {t('manage.usedTimes', { count: item.usageCount })}
           </Text>
         </View>
       </View>
@@ -259,10 +261,10 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
         color={COLORS.textLight}
       />
       <Text style={styles.emptyStateText}>
-        No custom {activeTab === 'medicines' ? 'medicines' : 'lab tests'} added yet
+        {activeTab === 'medicines' ? t('manage.noCustomMedicines') : t('manage.noCustomTests')}
       </Text>
       <Text style={styles.emptyStateSubtext}>
-        Tap the + button to add one
+        {t('manage.tapToAdd')}
       </Text>
     </View>
   );
@@ -278,7 +280,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
-              Add {activeTab === 'medicines' ? 'Medicine' : 'Lab Test'}
+              {activeTab === 'medicines' ? t('manage.addMedicine') : t('manage.addLabTest')}
             </Text>
             <TouchableOpacity onPress={() => setShowAddModal(false)}>
               <Ionicons name="close" size={24} color={COLORS.text} />
@@ -287,19 +289,19 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
 
           <ScrollView style={styles.modalBody}>
             <Text style={styles.fieldLabel}>
-              {activeTab === 'medicines' ? 'Medicine Name' : 'Test Name'} *
+              {activeTab === 'medicines' ? t('manage.medicineName') : t('manage.testName')} *
             </Text>
             <TextInput
               style={styles.input}
               value={formName}
               onChangeText={setFormName}
-              placeholder="Enter name"
+              placeholder={t('manage.enterName')}
               placeholderTextColor={COLORS.textLight}
             />
 
             {activeTab === 'medicines' ? (
               <>
-                <Text style={styles.fieldLabel}>Type</Text>
+                <Text style={styles.fieldLabel}>{t('manage.typeLabel')}</Text>
                 <View style={styles.typeSelector}>
                   {['Tablet', 'Syrup', 'Injection', 'Capsule', 'Ointment'].map(type => (
                     <TouchableOpacity
@@ -322,18 +324,18 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
                   ))}
                 </View>
 
-                <Text style={styles.fieldLabel}>Strength (optional)</Text>
+                <Text style={styles.fieldLabel}>{t('manage.strengthLabel')}</Text>
                 <TextInput
                   style={styles.input}
                   value={formStrength}
                   onChangeText={setFormStrength}
-                  placeholder="e.g., 500mg"
+                  placeholder={t('manage.strengthPlaceholder')}
                   placeholderTextColor={COLORS.textLight}
                 />
               </>
             ) : (
               <>
-                <Text style={styles.fieldLabel}>Category</Text>
+                <Text style={styles.fieldLabel}>{t('manage.categoryLabel')}</Text>
                 <View style={styles.typeSelector}>
                   {['Blood', 'Urine', 'Imaging', 'Other'].map(category => (
                     <TouchableOpacity
@@ -367,7 +369,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
                 resetForm();
               }}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
@@ -377,7 +379,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
               {submitting ? (
                 <ActivityIndicator color={COLORS.white} size="small" />
               ) : (
-                <Text style={styles.submitButtonText}>Add</Text>
+                <Text style={styles.submitButtonText}>{t('common.add')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -398,7 +400,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Manage Medicines & Tests</Text>
+        <Text style={styles.headerTitle}>{t('manage.title')}</Text>
         <TouchableOpacity
           onPress={() => setShowAddModal(true)}
           style={styles.addBtn}
@@ -427,7 +429,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
               activeTab === 'medicines' && styles.tabTextActive,
             ]}
           >
-            Medicines ({medicines.length})
+            {t('manage.medicinesCount', { count: medicines.length })}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -448,7 +450,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
               activeTab === 'tests' && styles.tabTextActive,
             ]}
           >
-            Lab Tests ({tests.length})
+            {t('manage.labTestsCount', { count: tests.length })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -460,7 +462,7 @@ export default function MedicineTestManagementScreen({ navigation }: MedicineTes
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder={`Search ${activeTab === 'medicines' ? 'medicines' : 'lab tests'}...`}
+          placeholder={activeTab === 'medicines' ? t('manage.searchMedicines') : t('manage.searchLabTests')}
           placeholderTextColor={COLORS.textLight}
         />
         {searchQuery.length > 0 && (

@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { COLORS } from '../constants/theme';
 import { DoctorStackParamList } from '../types/navigation.types';
@@ -41,12 +42,13 @@ const SettingsStack = createNativeStackNavigator();
 const PatientStack = createNativeStackNavigator();
 
 function DoctorQueueStack(): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <QueueStack.Navigator screenOptions={{ headerShown: false }}>
       <QueueStack.Screen name="DoctorDashboard" component={DoctorDashboard} />
-      <QueueStack.Screen name="Consult" component={ConsultScreen} options={{ headerShown: true, title: 'Consultation' }} />
-      <QueueStack.Screen name="MedicinePicker" component={MedicinePickerScreen} options={{ headerShown: true, title: 'Add Medicine' }} />
-      <QueueStack.Screen name="LabTestPicker" component={LabTestPickerScreen} options={{ headerShown: true, title: 'Add Lab Test' }} />
+      <QueueStack.Screen name="Consult" component={ConsultScreen} options={{ headerShown: true, title: t('nav.consultation') }} />
+      <QueueStack.Screen name="MedicinePicker" component={MedicinePickerScreen} options={{ headerShown: true, title: t('nav.addMedicine') }} />
+      <QueueStack.Screen name="LabTestPicker" component={LabTestPickerScreen} options={{ headerShown: true, title: t('nav.addLabTest') }} />
       <QueueStack.Screen name="PrescriptionPreview" component={PrescriptionPreviewScreen} options={{ headerShown: false }} />
       <QueueStack.Screen name="RxSuccess" component={RxSuccessScreen} options={{ headerShown: false }} />
       <QueueStack.Screen name="PatientHistory" component={PatientHistoryScreen} options={{ headerShown: false }} />
@@ -96,6 +98,7 @@ function DoctorSettingsStack(): React.JSX.Element {
 }
 
 export default function DoctorTabNavigator(): React.JSX.Element {
+  const { t } = useTranslation();
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -146,19 +149,19 @@ export default function DoctorTabNavigator(): React.JSX.Element {
         },
       })}
     >
-      <Tab.Screen name="DoctorQueue" component={DoctorQueueStack} options={{ tabBarLabel: 'Queue' }} />
+      <Tab.Screen name="DoctorQueue" component={DoctorQueueStack} options={{ tabBarLabel: t('nav.queue') }} />
 
       {/* Every doctor can add/manage patients directly, regardless of whether
           they have assistants. */}
       <Tab.Screen
         name="DoctorPatients"
         component={DoctorPatientStack}
-        options={{ tabBarLabel: 'Patients' }}
+        options={{ tabBarLabel: t('nav.patients') }}
       />
 
-      <Tab.Screen name="DoctorWallet" component={DoctorWalletStack} options={{ tabBarLabel: 'Wallet' }} />
-      <Tab.Screen name="DoctorAnalytics" component={DoctorAnalyticsStack} options={{ tabBarLabel: 'Analytics' }} />
-      <Tab.Screen name="DoctorSettings" component={DoctorSettingsStack} options={{ tabBarLabel: 'Settings' }} />
+      <Tab.Screen name="DoctorWallet" component={DoctorWalletStack} options={{ tabBarLabel: t('nav.wallet') }} />
+      <Tab.Screen name="DoctorAnalytics" component={DoctorAnalyticsStack} options={{ tabBarLabel: t('nav.analytics') }} />
+      <Tab.Screen name="DoctorSettings" component={DoctorSettingsStack} options={{ tabBarLabel: t('nav.settings') }} />
     </Tab.Navigator>
   );
 }

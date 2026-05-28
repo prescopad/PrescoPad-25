@@ -6,7 +6,7 @@ import { Clinic, DoctorProfile } from '../types/clinic.types';
 export async function generatePrescriptionPDF(
   prescription: Prescription,
   clinic: Clinic | null,
-  doctor: DoctorProfile | null
+  doctor: DoctorProfile | null,
 ): Promise<string> {
   const html = buildPrescriptionHTML(prescription, clinic, doctor);
   const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
@@ -24,6 +24,20 @@ export async function generatePrescriptionPDF(
   const sourceFile = new File(uri);
   sourceFile.move(destFile);
   return destFile.uri;
+}
+
+/**
+ * Open the native print dialog for an already-generated prescription. If the
+ * PDF doesn't exist yet, the caller should generate it first via
+ * generatePrescriptionPDF.
+ */
+export async function printPrescription(
+  prescription: Prescription,
+  clinic: Clinic | null,
+  doctor: DoctorProfile | null,
+): Promise<void> {
+  const html = buildPrescriptionHTML(prescription, clinic, doctor);
+  await Print.printAsync({ html });
 }
 
 function buildPrescriptionHTML(

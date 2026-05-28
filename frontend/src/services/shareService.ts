@@ -1,5 +1,8 @@
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
+import { File, Directory, Paths } from 'expo-file-system';
+import { Platform, Share, ToastAndroid } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 
 export async function shareViaPDF(pdfPath: string): Promise<void> {
   const isAvailable = await Sharing.isAvailableAsync();
@@ -9,6 +12,63 @@ export async function shareViaPDF(pdfPath: string): Promise<void> {
   await Sharing.shareAsync(pdfPath, {
     mimeType: 'application/pdf',
     dialogTitle: 'Share Prescription',
+  });
+}
+
+/**
+ * WhatsApp-first share for a generated prescription PDF.
+ *
+ * Strategy (works on both Android and iOS without needing the WhatsApp
+ * Business API):
+ *   1. Open WhatsApp directly to the patient's number with the clinic + app
+ *      message pre-filled — the doctor sees the patient picked already.
+ *   2. After a short delay, open the OS share sheet for the PDF, where the
+ *      doctor picks WhatsApp → patient → Send. The PDF arrives as an
+ *      attachment in the same conversation.
+ *
+ * If WhatsApp isn't installed, we fall back to the system share sheet only
+ * and surface a clear error to the caller.
+ */
+export async function shareRxOnWhatsApp(
+  pdfPath: string,
+  message: string,
+  phone?: string,
+): Promise<void> {
+  const isAvailable = await Sharing.isAvailableAsync();
+  if (!isAvailable) {
+    throw new Error('Sharing is not available on this device');
+  }
+
+  // Open WhatsApp with the patient + message.
+  let whatsappOpened = false;
+  if (phone) {
+    const cleaned = phone.replace(/\D/g, '');
+    const number = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
+    const deepLink = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
+    try {
+      const canOpen = await Linking.canOpenURL(deepLink);
+      if (canOpen) {
+        await Linking.openURL(deepLink);
+        whatsappOpened = true;
+        // Give WhatsApp a beat to open before stacking the share sheet.
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    } catch {
+      // Ignore — fall through to share sheet.
+    }
+  }
+
+  if (Platform.OS === 'android' && !whatsappOpened) {
+    // On Android, if deep link failed, fallback to clipboard.
+    await Clipboard.setStringAsync(message);
+    ToastAndroid.show('Message copied! Paste it as the caption.', ToastAndroid.LONG);
+  }
+
+  // Share the actual PDF via OS sheet (so WhatsApp gets the attachment).
+  await Sharing.shareAsync(pdfPath, {
+    mimeType: 'application/pdf',
+    dialogTitle: 'Share Prescription',
+    UTI: 'com.adobe.pdf',
   });
 }
 
@@ -26,6 +86,27 @@ export async function shareViaWhatsApp(
     throw new Error('WhatsApp is not installed');
   }
   await Linking.openURL(url);
+}
+
+/**
+ * Save the generated PDF to a user-accessible location and return its uri.
+ * The PDF is already inside the app's document directory; this clones it to
+ * a fresh path with a friendly name so a subsequent share sheet shows a
+ * sensible filename to the user. For Android proper "Downloads" we'd need
+ * the Storage Access Framework — out of scope for now.
+ */
+export async function exportPDFCopy(
+  pdfPath: string,
+  friendlyName: string,
+): Promise<string> {
+  const cleanName = friendlyName.replace(/[^a-zA-Z0-9_-]+/g, '_') + '.pdf';
+  const downloadsDir = new Directory(Paths.document, 'downloads');
+  if (!downloadsDir.exists) downloadsDir.create({ intermediates: true });
+  const dest = new File(downloadsDir, cleanName);
+  if (dest.exists) dest.delete();
+  const src = new File(pdfPath);
+  src.copy(dest);
+  return dest.uri;
 }
 
 export async function shareViaSMS(
