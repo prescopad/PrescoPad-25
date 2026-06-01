@@ -4,6 +4,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'PrescoPad',
   slug: 'PrescoPad',
+  ios: {
+    ...config.ios,
+    bundleIdentifier: 'com.prescopad.app',
+  },
   plugins: [
     ...(config.plugins ?? []),
     '@react-native-community/datetimepicker',

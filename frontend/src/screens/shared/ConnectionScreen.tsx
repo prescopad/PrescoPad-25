@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { useAuthStore } from '../../store/useAuthStore';
 import { ConnectionRequest, TeamMember, ClinicListItem, DoctorListItem } from '../../types/connection.types';
@@ -64,6 +64,41 @@ export default function ConnectionScreen(): React.JSX.Element {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData]),
+  );
+
+  useEffect(() => {
+    if (isDoctor || user?.clinicId) {
+      return;
+    }
+
+    let isActive = true;
+
+    const syncConnectionState = async () => {
+      try {
+        const session = await refreshSession();
+        if (!isActive) return;
+
+        if (session.user.clinicId) {
+          await setUser(session.user, session.accessToken, session.refreshToken);
+        }
+      } catch {
+        // Keep polling quietly until the doctor accepts or the session becomes available.
+      }
+    };
+
+    syncConnectionState();
+    const timer = setInterval(syncConnectionState, 15_000);
+
+    return () => {
+      isActive = false;
+      clearInterval(timer);
+    };
+  }, [isDoctor, user?.clinicId, setUser]);
 
   const loadClinics = useCallback(async (search?: string) => {
     setLoadingClinics(true);

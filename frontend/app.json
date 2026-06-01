@@ -14,6 +14,7 @@
     },
     "ios": {
       "supportsTablet": false,
+      "bundleIdentifier": "com.prescopad.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "PrescoPad needs microphone access to record consultations for transcription."
       }

@@ -163,7 +163,11 @@ async def get_pending(user_id: str, role: str) -> list:
 
 async def get_team(clinic_id: str) -> list:
     db = get_db()
-    cursor = db.users.find({"clinic_id": clinic_id, "role": "assistant", "is_active": True})
+    cursor = db.users.find({
+        "clinic_id": clinic_id,
+        "role": {"$in": ["doctor", "assistant"]},
+        "is_active": True,
+    })
     team = []
     async for u in cursor:
         doc = serialize_doc(u)
