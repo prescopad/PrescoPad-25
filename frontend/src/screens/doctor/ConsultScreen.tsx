@@ -42,15 +42,40 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
   } = usePrescriptionStore();
 
   const aiApplied = usePrescriptionStore((s) => s.aiApplied);
+  const aiFilledFields = usePrescriptionStore((s) => s.aiFilledFields);
+  const manuallyEditedFields = usePrescriptionStore((s) => s.manuallyEditedFields);
+
   const [isCreating, setIsCreating] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [newSymptom, setNewSymptom] = useState('');
 
   // Derived: which fields were left empty after AI applied?
+  const missingSymptoms    = aiApplied && (!currentDraft.symptoms || currentDraft.symptoms.length === 0);
   const missingDiagnosis   = aiApplied && !currentDraft.diagnosis.trim();
   const missingMedicines   = aiApplied && currentDraft.medicines.length === 0;
   const missingLabTests    = aiApplied && currentDraft.labTests.length === 0;
   const missingAdvice      = aiApplied && !currentDraft.advice.trim();
   const missingFollowUp    = aiApplied && !currentDraft.followUpDate.trim();
+
+  const isAiFilled = (field: string) => {
+    return aiApplied && aiFilledFields[field] && !manuallyEditedFields[field];
+  };
+
+  const handleAddSymptom = () => {
+    const trimmed = newSymptom.trim();
+    if (trimmed) {
+      const currentSyms = currentDraft.symptoms || [];
+      if (!currentSyms.includes(trimmed)) {
+        updateDraft({ symptoms: [...currentSyms, trimmed] });
+      }
+      setNewSymptom('');
+    }
+  };
+
+  const handleRemoveSymptom = (index: number) => {
+    const currentSyms = currentDraft.symptoms || [];
+    updateDraft({ symptoms: currentSyms.filter((_, i) => i !== index) });
+  };
 
   // Reset draft when doctor leaves Consult via back button (not forward to Preview)
   useEffect(() => {
@@ -249,14 +274,77 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
           <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
         </TouchableOpacity>
 
+        {/* Symptoms */}
+        <View style={styles.section}>
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionTitle}>{t('consult.symptoms', 'Symptoms')}</Text>
+            {isAiFilled('symptoms') && <VoiceBadge />}
+            {missingSymptoms && <MissingBadge />}
+          </View>
+          
+          {/* Tag Chips Wrapper */}
+          <View style={[
+            styles.symptomsContainer,
+            missingSymptoms && styles.emptySectionMissing,
+            isAiFilled('symptoms') && styles.inputAiFilled
+          ]}>
+            {(!currentDraft.symptoms || currentDraft.symptoms.length === 0) ? (
+              <Text style={[styles.emptyText, missingSymptoms && styles.emptyTextMissing, { paddingVertical: SPACING.xs }]}>
+                No symptoms recorded. Type below to add manually.
+              </Text>
+            ) : (
+              <View style={styles.tagsWrapper}>
+                {currentDraft.symptoms.map((sym, idx) => (
+                  <View key={`sym-${idx}`} style={styles.tagChip}>
+                    <Text style={styles.tagText}>{sym}</Text>
+                    <TouchableOpacity
+                      style={styles.tagCloseBtn}
+                      onPress={() => handleRemoveSymptom(idx)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={16} color={COLORS.primary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+            
+            {/* Tag Input Row */}
+            <View style={styles.tagInputRow}>
+              <TextInput
+                style={styles.tagInput}
+                placeholder="Add symptom (e.g. Fever, Cough)..."
+                placeholderTextColor={COLORS.textLight}
+                value={newSymptom}
+                onChangeText={setNewSymptom}
+                onSubmitEditing={handleAddSymptom}
+                blurOnSubmit={false}
+              />
+              <TouchableOpacity
+                style={styles.tagAddBtn}
+                onPress={handleAddSymptom}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={16} color={COLORS.white} />
+                <Text style={styles.tagAddBtnText}>{t('common.add')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
         {/* Diagnosis */}
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>{t('consult.diagnosis')} *</Text>
+            {isAiFilled('diagnosis') && <VoiceBadge />}
             {missingDiagnosis && <MissingBadge />}
           </View>
           <TextInput
-            style={[styles.diagnosisInput, missingDiagnosis && styles.inputMissing]}
+            style={[
+              styles.diagnosisInput, 
+              missingDiagnosis && styles.inputMissing,
+              isAiFilled('diagnosis') && styles.inputAiFilled
+            ]}
             placeholder="Enter diagnosis..."
             placeholderTextColor={COLORS.textLight}
             value={currentDraft.diagnosis}
@@ -274,6 +362,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
               <Text style={styles.sectionTitle}>
                 {t('consult.medicines')} ({currentDraft.medicines.length})
               </Text>
+              {isAiFilled('medicines') && <VoiceBadge />}
               {missingMedicines && <MissingBadge />}
             </View>
             <TouchableOpacity
@@ -288,16 +377,38 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
           {currentDraft.medicines.length === 0 ? (
             <TouchableOpacity
-              style={[styles.emptySection, missingMedicines && styles.emptySectionMissing]}
+              style={[
+                styles.emptySection, 
+                missingMedicines && styles.emptySectionMissing,
+                isAiFilled('medicines') && styles.emptySectionAiFilled
+              ]}
               onPress={handleAddMedicine}
               activeOpacity={0.7}
             >
-              <Ionicons name="medical-outline" size={24} color={missingMedicines ? COLORS.warning : COLORS.textLight} />
-              <Text style={[styles.emptyText, missingMedicines && styles.emptyTextMissing]}>Tap to add medicines</Text>
+              <Ionicons 
+                name="medical-outline" 
+                size={24} 
+                color={missingMedicines ? COLORS.warning : isAiFilled('medicines') ? COLORS.primary : COLORS.textLight} 
+              />
+              <Text 
+                style={[
+                  styles.emptyText, 
+                  missingMedicines && styles.emptyTextMissing,
+                  isAiFilled('medicines') && styles.emptyTextAiFilled
+                ]}
+              >
+                Tap to add medicines
+              </Text>
             </TouchableOpacity>
           ) : (
             currentDraft.medicines.map((med: MedicineDraft, index: number) => (
-              <View key={`med-${index}`} style={styles.itemCard}>
+              <View 
+                key={`med-${index}`} 
+                style={[
+                  styles.itemCard,
+                  isAiFilled('medicines') && styles.itemCardAiFilled
+                ]}
+              >
                 <View style={styles.itemContent}>
                   <View style={styles.itemHeader}>
                     <Text style={styles.itemName}>{med.medicineName}</Text>
@@ -330,6 +441,7 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
               <Text style={styles.sectionTitle}>
                 {t('consult.labTests')} ({currentDraft.labTests.length})
               </Text>
+              {isAiFilled('labTests') && <VoiceBadge />}
               {missingLabTests && <MissingBadge />}
             </View>
             <TouchableOpacity
@@ -344,16 +456,38 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
           {currentDraft.labTests.length === 0 ? (
             <TouchableOpacity
-              style={[styles.emptySection, missingLabTests && styles.emptySectionMissing]}
+              style={[
+                styles.emptySection, 
+                missingLabTests && styles.emptySectionMissing,
+                isAiFilled('labTests') && styles.emptySectionAiFilled
+              ]}
               onPress={handleAddLabTest}
               activeOpacity={0.7}
             >
-              <Ionicons name="flask-outline" size={24} color={missingLabTests ? COLORS.warning : COLORS.textLight} />
-              <Text style={[styles.emptyText, missingLabTests && styles.emptyTextMissing]}>Tap to add lab tests</Text>
+              <Ionicons 
+                name="flask-outline" 
+                size={24} 
+                color={missingLabTests ? COLORS.warning : isAiFilled('labTests') ? COLORS.primary : COLORS.textLight} 
+              />
+              <Text 
+                style={[
+                  styles.emptyText, 
+                  missingLabTests && styles.emptyTextMissing,
+                  isAiFilled('labTests') && styles.emptyTextAiFilled
+                ]}
+              >
+                Tap to add lab tests
+              </Text>
             </TouchableOpacity>
           ) : (
             currentDraft.labTests.map((test: LabTestDraft, index: number) => (
-              <View key={`test-${index}`} style={styles.itemCard}>
+              <View 
+                key={`test-${index}`} 
+                style={[
+                  styles.itemCard,
+                  isAiFilled('labTests') && styles.itemCardAiFilled
+                ]}
+              >
                 <View style={styles.itemContent}>
                   <View style={styles.itemHeader}>
                     <Text style={styles.itemName}>{test.testName}</Text>
@@ -378,10 +512,15 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>Additional Advice</Text>
+            {isAiFilled('advice') && <VoiceBadge />}
             {missingAdvice && <MissingBadge />}
           </View>
           <TextInput
-            style={[styles.adviceInput, missingAdvice && styles.inputMissing]}
+            style={[
+              styles.adviceInput, 
+              missingAdvice && styles.inputMissing,
+              isAiFilled('advice') && styles.inputAiFilled
+            ]}
             placeholder="Any additional advice for the patient..."
             placeholderTextColor={COLORS.textLight}
             value={currentDraft.advice}
@@ -396,10 +535,15 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>{t('consult.followUp')}</Text>
+            {isAiFilled('followUpDate') && <VoiceBadge />}
             {missingFollowUp && <MissingBadge />}
           </View>
           <TouchableOpacity
-            style={[styles.followUpRow, missingFollowUp && styles.inputMissing]}
+            style={[
+              styles.followUpRow, 
+              missingFollowUp && styles.inputMissing,
+              isAiFilled('followUpDate') && styles.inputAiFilled
+            ]}
             onPress={() => setShowDatePicker(true)}
             activeOpacity={0.7}
           >
@@ -462,6 +606,15 @@ function MissingBadge() {
   );
 }
 
+function VoiceBadge() {
+  return (
+    <View style={badgeStyles.voiceBadge}>
+      <Ionicons name="mic" size={12} color={COLORS.primary} style={{ marginRight: 2 }} />
+      <Text style={badgeStyles.voiceText}>AI Filled</Text>
+    </View>
+  );
+}
+
 const badgeStyles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
@@ -474,6 +627,17 @@ const badgeStyles = StyleSheet.create({
     marginLeft: 6,
   },
   text: { fontSize: 10, fontWeight: '600', color: COLORS.warning },
+  voiceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  voiceText: { fontSize: 10, fontWeight: '600', color: COLORS.primary },
 });
 
 const styles = StyleSheet.create({
@@ -744,5 +908,88 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.white,
+  },
+
+  // Symptoms & Tags Component
+  symptomsContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+  },
+  tagsWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  tagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryLight,
+    paddingLeft: SPACING.md,
+    paddingRight: 6,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    gap: 4,
+  },
+  tagText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tagCloseBtn: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tagInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginTop: 4,
+  },
+  tagInput: {
+    flex: 1,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    fontSize: 13,
+    color: COLORS.text,
+  },
+  tagAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: RADIUS.sm,
+    gap: 4,
+  },
+  tagAddBtnText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // AI-filled state soft highlights
+  inputAiFilled: {
+    borderColor: COLORS.primary,
+    borderWidth: 1.5,
+    backgroundColor: COLORS.primarySurface,
+  },
+  emptySectionAiFilled: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySurface,
+  },
+  emptyTextAiFilled: {
+    color: COLORS.primary,
+  },
+  itemCardAiFilled: {
+    borderColor: COLORS.primaryLight,
+    backgroundColor: COLORS.primarySurface,
   },
 });

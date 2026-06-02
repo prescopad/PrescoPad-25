@@ -19,7 +19,7 @@ import { Prescription } from '../types/prescription.types';
 import { useClinicStore } from '../store/useClinicStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { generatePrescriptionPDF, printPrescription } from '../services/pdfService';
-import { exportPDFCopy, shareRxOnWhatsApp } from '../services/shareService';
+import { exportPDFCopy, shareRxOnWhatsApp, shareViaPDF } from '../services/shareService';
 
 interface Props {
   prescription: Prescription | null;
@@ -34,6 +34,8 @@ export default function PrescriptionActions({ prescription, show, layout = 'row'
   const { user } = useAuthStore();
   const [busy, setBusy] = useState<null | 'whatsapp' | 'download' | 'print'>(null);
   const [pdfPath, setPdfPath] = useState<string | null>(null);
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
+  const [waStep, setWaStep] = useState<'idle' | 'text_sent' | 'completed'>('idle');
 
   if (!prescription) return null;
   const want = { whatsapp: true, download: true, print: true, ...show };
@@ -55,12 +57,14 @@ export default function PrescriptionActions({ prescription, show, layout = 'row'
     }
     setBusy('whatsapp');
     try {
-      const path = await ensurePdf();
       const message = t('share.defaultMessage', {
         patient: prescription.patientName,
         clinic: clinic?.name || 'PrescoPad',
       });
-      await shareRxOnWhatsApp(path, message, prescription.patientPhone);
+      // Step 1: Open direct WhatsApp chat with patient's pre-filled text message
+      await shareRxOnWhatsApp(message, prescription.patientPhone);
+      setWaStep('text_sent');
+      setShowSuccessOverlay(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : t('common.somethingWrong');
       const looksLikeMissingWA = msg.toLowerCase().includes('whatsapp');
@@ -78,7 +82,6 @@ export default function PrescriptionActions({ prescription, show, layout = 'row'
       const friendly = `${prescription.id}_${(prescription.patientName || 'patient').replace(/\s+/g, '_')}`;
       const exported = await exportPDFCopy(path, friendly);
       // Surface to the user — also opens the share sheet so they can save to Files / Drive.
-      const { shareViaPDF } = await import('../services/shareService');
       await shareViaPDF(exported);
     } catch (e) {
       Alert.alert(t('common.error'), e instanceof Error ? e.message : t('share.saveFailed'));
@@ -124,13 +127,99 @@ export default function PrescriptionActions({ prescription, show, layout = 'row'
     </TouchableOpacity>
   );
 
+  if (showSuccessOverlay) {
+    return (
+      <View style={styles.successContainer}>
+        <View style={styles.successHeader}>
+          <View style={styles.successBadge}>
+            <Ionicons
+              name={waStep === 'completed' ? 'checkmark-circle' : 'chatbubble-ellipses-outline'}
+              size={24}
+              color={waStep === 'completed' ? COLORS.success : COLORS.primary}
+            />
+          </View>
+          <Text style={styles.successText}>
+            {waStep === 'completed' ? (
+              <Text>
+                Prescription PDF and message sent to <Text style={styles.patientNameText}>{prescription.patientName}</Text> ✓
+              </Text>
+            ) : (
+              <Text>
+                Direct WhatsApp chat opened for <Text style={styles.patientNameText}>{prescription.patientName}</Text>! Tap below to send the PDF.
+              </Text>
+            )}
+          </Text>
+        </View>
+        <View style={styles.successActions}>
+          {waStep === 'text_sent' ? (
+            <>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => {
+                  setWaStep('idle');
+                  setShowSuccessOverlay(false);
+                  handleWhatsApp();
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="refresh-outline" size={16} color={COLORS.whatsapp} />
+                <Text style={styles.retryBtnText}>Re-open Chat</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sharePdfBtn}
+                onPress={async () => {
+                  try {
+                    const path = await ensurePdf();
+                    await shareViaPDF(path);
+                    setWaStep('completed');
+                  } catch (e) {
+                    Alert.alert(t('common.error'), e instanceof Error ? e.message : 'Failed to share PDF');
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="document-text-outline" size={16} color={COLORS.white} />
+                <Text style={styles.sharePdfBtnText}>Send PDF</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => {
+                  setWaStep('idle');
+                  setShowSuccessOverlay(false);
+                  handleWhatsApp();
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="refresh-outline" size={16} color={COLORS.whatsapp} />
+                <Text style={styles.retryBtnText}>Send Again</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.doneBtn}
+                onPress={() => {
+                  setWaStep('idle');
+                  setShowSuccessOverlay(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.doneBtnText}>Done</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.row, layout === 'column' && styles.column]}>
       {want.whatsapp && (
         <ButtonView
           active={busy === 'whatsapp'}
           icon="logo-whatsapp"
-          label={t('share.shareWhatsapp')}
+          label="Send to Patient (WhatsApp)"
           onPress={handleWhatsApp}
           color={COLORS.whatsapp}
         />
@@ -190,5 +279,86 @@ const styles = StyleSheet.create({
   btnLabel: {
     fontWeight: '700',
     fontSize: 12,
+  },
+  successContainer: {
+    backgroundColor: COLORS.successLight,
+    borderColor: '#bbf7d0',
+    borderWidth: 1.5,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginVertical: SPACING.md,
+    ...SHADOWS.md,
+  },
+  successHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  successBadge: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.full,
+    padding: 2,
+  },
+  successText: {
+    fontSize: 14,
+    color: '#166534',
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 20,
+  },
+  patientNameText: {
+    fontWeight: '700',
+  },
+  successActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: SPACING.sm,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1.5,
+    borderColor: COLORS.whatsapp,
+    backgroundColor: COLORS.white,
+  },
+  retryBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.whatsapp,
+  },
+  sharePdfBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.primary,
+    ...SHADOWS.sm,
+  },
+  sharePdfBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  doneBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.sm,
+  },
+  doneBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.white,
   },
 });

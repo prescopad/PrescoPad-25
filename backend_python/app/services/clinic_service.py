@@ -40,6 +40,7 @@ async def get_doctors_in_clinic(clinic_id: str) -> list:
         # Normalize snake_case → camelCase fields the frontend expects
         doc["doctorCode"] = doc.get("doctor_code")
         doc["regNumber"] = doc.get("reg_number")
+        doc["signatureUrl"] = doc.get("signature_url")
         doctors.append(doc)
     return doctors
 

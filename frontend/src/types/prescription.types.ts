@@ -35,6 +35,7 @@ export interface Prescription {
   diagnosis: string;
   advice: string;
   followUpDate: string | null;
+  symptoms: string[];
   pdfPath: string | null;
   pdfHash: string | null;
   signature: string | null;
@@ -55,6 +56,7 @@ export interface PrescriptionDraft {
   diagnosis: string;
   advice: string;
   followUpDate: string;
+  symptoms: string[];
   medicines: Omit<PrescriptionMedicine, 'id' | 'prescriptionId'>[];
   labTests: Omit<PrescriptionLabTest, 'id' | 'prescriptionId'>[];
 }

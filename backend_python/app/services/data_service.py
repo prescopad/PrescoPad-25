@@ -253,6 +253,7 @@ async def create_prescription(clinic_id: str, doctor_id: str, data: dict) -> dic
         "diagnosis": data.get("diagnosis"),
         "advice": data.get("advice"),
         "follow_up_date": data.get("follow_up_date"),
+        "symptoms": data.get("symptoms", []),
         "medicines": medicines,
         "lab_tests": lab_tests,
         "status": "draft",
@@ -266,7 +267,7 @@ async def create_prescription(clinic_id: str, doctor_id: str, data: dict) -> dic
     return serialize_doc(rx)
 
 
-async def finalize_prescription(clinic_id: str, doctor_id: str, prescription_id: str) -> dict:
+async def finalize_prescription(clinic_id: str, doctor_id: str, prescription_id: str, signature: str = None, pdf_hash: str = None) -> dict:
     """Finalize a prescription and atomically deduct the prescription fee.
 
     Idempotent: if the prescription is already finalized, returns it as-is.
@@ -306,6 +307,8 @@ async def finalize_prescription(clinic_id: str, doctor_id: str, prescription_id:
         {"$set": {
             "status": "finalized",
             "wallet_deducted": fee,
+            "signature": signature,
+            "pdf_hash": pdf_hash,
             "finalized_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
         }}

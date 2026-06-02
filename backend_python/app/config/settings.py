@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: Optional[str] = None
 
     GROQ_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
 
     # Admin seed — only used when NODE_ENV != "production" and explicitly enabled
     SEED_ADMIN: bool = False

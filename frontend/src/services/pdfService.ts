@@ -137,6 +137,11 @@ function buildPrescriptionHTML(
     </div>
   </div>
 
+  ${rx.symptoms && rx.symptoms.length > 0 ? `
+  <div class="section-title">Symptoms</div>
+  <div style="font-size:12px;color:#334155;margin-bottom:8px;line-height:18px;">${rx.symptoms.join(', ')}</div>
+  ` : ''}
+
   ${rx.diagnosis ? `
   <div class="section-title">Diagnosis</div>
   <div class="diagnosis-box">${rx.diagnosis}</div>
@@ -173,7 +178,13 @@ function buildPrescriptionHTML(
   ` : ''}
 
   <div class="signature-section">
-    ${rx.signature ? `<img src="${rx.signature}" class="signature-img" />` : ''}
+    ${rx.signature && rx.signature.startsWith('M') ? `
+      <svg width="150" height="50" viewBox="0 0 300 100" style="display: block; margin-left: auto; margin-bottom: 4px;">
+        <path d="${rx.signature}" stroke="#0F172A" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    ` : rx.signature ? `
+      <img src="${rx.signature}" class="signature-img" />
+    ` : ''}
     <div class="signature-line">
       <div style="font-size:12px;font-weight:600;">Dr. ${doctorName}</div>
       ${doctorReg ? `<div style="font-size:10px;color:#64748B;">Reg. No: ${doctorReg}</div>` : ''}
@@ -197,6 +208,10 @@ export function buildShareText(
   text += `Date: ${dateStr}\n`;
   text += `Doctor: Dr. ${doctor?.name || 'Doctor'}\n\n`;
   text += `*Patient:* ${rx.patientName} (${rx.patientAge}/${rx.patientGender})\n\n`;
+
+  if (rx.symptoms && rx.symptoms.length > 0) {
+    text += `*Symptoms:* ${rx.symptoms.join(', ')}\n\n`;
+  }
 
   if (rx.diagnosis) {
     text += `*Diagnosis:* ${rx.diagnosis}\n\n`;

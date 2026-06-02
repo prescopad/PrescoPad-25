@@ -209,6 +209,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       (a.diagnosis ? filled : empty).push('Diagnosis');
       (a.advice ? filled : empty).push('Advice');
       (a.follow_up_date ? filled : empty).push('Follow-up date');
+      ((a.symptoms && a.symptoms.length) ? filled : empty).push(`Symptoms (${a.symptoms ? a.symptoms.length : 0})`);
       (a.medicines.length ? filled : empty).push(`Medicines (${a.medicines.length})`);
       (a.lab_tests.length ? filled : empty).push(`Lab tests (${a.lab_tests.length})`);
       Alert.alert(
@@ -227,8 +228,7 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
   const handleApplyAndContinue = () => {
     if (!autofill) return;
 
-    // Write everything in a single store update to avoid race conditions.
-    // setAiApplied(true) tells ConsultScreen not to reset the draft on mount.
+    // Convert AI medicines and lab tests to draft structure
     const medicines = autofill.medicines.map((m) => ({
       medicineName: m.medicine_name,
       type: m.type || 'Tablet',
@@ -245,22 +245,91 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       notes: t.notes || '',
     }));
 
-    // Single atomic update — no resetDraft() so nothing gets wiped mid-flight
-    updateDraft({
-      patientId: patient.id,
-      patientName: patient.name,
-      patientAge: patient.age ? String(patient.age) : '',
-      patientGender: patient.gender || '',
-      patientPhone: patient.phone || '',
-      diagnosis: autofill.diagnosis || '',
-      advice: autofill.advice || '',
-      followUpDate: autofill.follow_up_date || '',
-      medicines,
-      labTests,
-    });
+    // Get current draft state to check for conflicts
+    const currentDraft = usePrescriptionStore.getState().currentDraft;
 
-    setAiApplied(true);
-    navigation.navigate('Consult', { queueItem, patient });
+    const hasConflict =
+      (currentDraft.diagnosis.trim() && autofill.diagnosis && currentDraft.diagnosis.trim() !== autofill.diagnosis.trim()) ||
+      (currentDraft.advice.trim() && autofill.advice && currentDraft.advice.trim() !== autofill.advice.trim()) ||
+      (currentDraft.followUpDate.trim() && autofill.follow_up_date && currentDraft.followUpDate.trim() !== autofill.follow_up_date.trim()) ||
+      (currentDraft.symptoms.length > 0 && autofill.symptoms.length > 0) ||
+      (currentDraft.medicines.length > 0 && medicines.length > 0) ||
+      (currentDraft.labTests.length > 0 && labTests.length > 0);
+
+    const applyData = (mode: 'merge' | 'replace' | 'keep') => {
+      let finalDiagnosis = currentDraft.diagnosis;
+      let finalAdvice = currentDraft.advice;
+      let finalFollowUp = currentDraft.followUpDate;
+      let finalSymptoms = currentDraft.symptoms;
+      let finalMedicines = currentDraft.medicines;
+      let finalLabTests = currentDraft.labTests;
+
+      if (mode === 'replace') {
+        finalDiagnosis = autofill.diagnosis || '';
+        finalAdvice = autofill.advice || '';
+        finalFollowUp = autofill.follow_up_date || '';
+        finalSymptoms = autofill.symptoms || [];
+        finalMedicines = medicines;
+        finalLabTests = labTests;
+      } else if (mode === 'merge') {
+        finalDiagnosis = [currentDraft.diagnosis, autofill.diagnosis].filter(Boolean).join('\n');
+        finalAdvice = [currentDraft.advice, autofill.advice].filter(Boolean).join('\n');
+        finalFollowUp = currentDraft.followUpDate || autofill.follow_up_date || '';
+        finalSymptoms = Array.from(new Set([...currentDraft.symptoms, ...(autofill.symptoms || [])]));
+        finalMedicines = [...currentDraft.medicines, ...medicines];
+        finalLabTests = [...currentDraft.labTests, ...labTests];
+      } else if (mode === 'keep') {
+        finalDiagnosis = currentDraft.diagnosis || autofill.diagnosis || '';
+        finalAdvice = currentDraft.advice || autofill.advice || '';
+        finalFollowUp = currentDraft.followUpDate || autofill.follow_up_date || '';
+        if (currentDraft.symptoms.length === 0) finalSymptoms = autofill.symptoms || [];
+        if (currentDraft.medicines.length === 0) finalMedicines = medicines;
+        if (currentDraft.labTests.length === 0) finalLabTests = labTests;
+      }
+
+      // Write everything in a single store update to avoid race conditions.
+      updateDraft({
+        patientId: patient.id,
+        patientName: patient.name,
+        patientAge: patient.age ? String(patient.age) : '',
+        patientGender: patient.gender || '',
+        patientPhone: patient.phone || '',
+        diagnosis: finalDiagnosis,
+        advice: finalAdvice,
+        followUpDate: finalFollowUp,
+        symptoms: finalSymptoms,
+        medicines: finalMedicines,
+        labTests: finalLabTests,
+      });
+
+      // Record which fields were successfully auto-filled by AI
+      const aiFilledFields: Record<string, boolean> = {};
+      if (autofill.diagnosis) aiFilledFields.diagnosis = true;
+      if (autofill.advice) aiFilledFields.advice = true;
+      if (autofill.follow_up_date) aiFilledFields.followUpDate = true;
+      if (autofill.symptoms && autofill.symptoms.length > 0) aiFilledFields.symptoms = true;
+      if (medicines.length > 0) aiFilledFields.medicines = true;
+      if (labTests.length > 0) aiFilledFields.labTests = true;
+
+      usePrescriptionStore.getState().setAiFilledFields(aiFilledFields);
+      setAiApplied(true);
+      navigation.navigate('Consult', { queueItem, patient });
+    };
+
+    if (hasConflict) {
+      Alert.alert(
+        'AI Conflict Resolution',
+        'AI found new data for fields that already have manual entries. How would you like to apply the AI extraction?',
+        [
+          { text: 'Merge (Append)', onPress: () => applyData('merge') },
+          { text: 'Replace All', style: 'destructive', onPress: () => applyData('replace') },
+          { text: 'Keep Existing', onPress: () => applyData('keep') },
+        ],
+        { cancelable: true }
+      );
+    } else {
+      applyData('replace');
+    }
   };
 
   // ── Render helpers ───────────────────────────────────────────────────────────
@@ -375,6 +444,22 @@ export default function AITranscriptionScreen({ navigation, route }: Props): Rea
       {autofill && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Extracted Prescription Data</Text>
+
+          {autofill.symptoms && autofill.symptoms.length > 0 ? (
+            <View style={styles.infoRow}>
+              <Ionicons name="medical-outline" size={15} color={COLORS.primary} style={{ marginTop: 1 }} />
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <Text style={styles.infoLabel}>{t('consult.symptoms')}</Text>
+                <View style={styles.symptomsRow}>
+                  {autofill.symptoms.map((sym, idx) => (
+                    <View key={idx} style={styles.symptomChip}>
+                      <Text style={styles.symptomChipText}>{sym}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          ) : null}
 
           {autofill.diagnosis ? (
             <InfoRow icon="medical" label={t('consult.diagnosis')} value={autofill.diagnosis} />
@@ -728,4 +813,24 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   retryBtnText: { color: COLORS.primary, fontSize: 15, fontWeight: '600' },
+
+  symptomsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  symptomChip: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+  },
+  symptomChipText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });

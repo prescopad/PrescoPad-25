@@ -30,46 +30,22 @@ export async function shareViaPDF(pdfPath: string): Promise<void> {
  * and surface a clear error to the caller.
  */
 export async function shareRxOnWhatsApp(
-  pdfPath: string,
   message: string,
   phone?: string,
 ): Promise<void> {
-  const isAvailable = await Sharing.isAvailableAsync();
-  if (!isAvailable) {
-    throw new Error('Sharing is not available on this device');
-  }
-
-  // Open WhatsApp with the patient + message.
-  let whatsappOpened = false;
   if (phone) {
     const cleaned = phone.replace(/\D/g, '');
     const number = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
-    const deepLink = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
-    try {
-      const canOpen = await Linking.canOpenURL(deepLink);
-      if (canOpen) {
-        await Linking.openURL(deepLink);
-        whatsappOpened = true;
-        // Give WhatsApp a beat to open before stacking the share sheet.
-        await new Promise((r) => setTimeout(r, 800));
-      }
-    } catch {
-      // Ignore — fall through to share sheet.
+    const url = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
+    
+    const canOpen = await Linking.canOpenURL(url);
+    if (!canOpen) {
+      throw new Error('WhatsApp is not installed');
     }
+    await Linking.openURL(url);
+  } else {
+    throw new Error('No phone number provided');
   }
-
-  if (Platform.OS === 'android' && !whatsappOpened) {
-    // On Android, if deep link failed, fallback to clipboard.
-    await Clipboard.setStringAsync(message);
-    ToastAndroid.show('Message copied! Paste it as the caption.', ToastAndroid.LONG);
-  }
-
-  // Share the actual PDF via OS sheet (so WhatsApp gets the attachment).
-  await Sharing.shareAsync(pdfPath, {
-    mimeType: 'application/pdf',
-    dialogTitle: 'Share Prescription',
-    UTI: 'com.adobe.pdf',
-  });
 }
 
 export async function shareViaWhatsApp(

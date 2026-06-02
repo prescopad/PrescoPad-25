@@ -4,7 +4,7 @@ from typing import Optional
 from app.models.data import (
     PatientRequest, QueueRequest, QueueStatusRequest,
     PrescriptionRequest, CustomMedicineRequest, CustomMedicineUsageRequest,
-    CustomLabTestRequest, CustomLabTestUsageRequest,
+    CustomLabTestRequest, CustomLabTestUsageRequest, FinalizePrescriptionRequest,
 )
 from app.middleware.auth import get_current_user, require_doctor, TokenData
 import app.services.data_service as data_service
@@ -257,13 +257,15 @@ async def create_prescription(request: Request, body: PrescriptionRequest):
 
 
 @router.put("/prescriptions/{prescription_id}/finalize")
-async def finalize_prescription(prescription_id: str, request: Request):
+async def finalize_prescription(prescription_id: str, request: Request, body: FinalizePrescriptionRequest):
     user: TokenData = await require_doctor(request)
     if not user.clinic_id:
         return _err("No clinic associated", 400)
     try:
         prescription = await data_service.finalize_prescription(
-            user.clinic_id, user.user_id, prescription_id
+            user.clinic_id, user.user_id, prescription_id,
+            signature=body.signature,
+            pdf_hash=body.pdf_hash or body.pdfHash
         )
         return _ok({"prescription": prescription, "message": "Prescription finalized"})
     except ValueError as e:

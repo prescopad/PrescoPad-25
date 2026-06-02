@@ -17,6 +17,8 @@ interface PrescriptionStore {
   isLoading: boolean;
   aiApplied: boolean; // true after AI/transcript auto-fill, so ConsultScreen can highlight empty fields
   queueItemId: string | null; // tracks which queue item this consultation belongs to
+  aiFilledFields: Record<string, boolean>;
+  manuallyEditedFields: Record<string, boolean>;
 
   // Draft management
   updateDraft: (partial: Partial<PrescriptionDraft>) => void;
@@ -26,6 +28,7 @@ interface PrescriptionStore {
   removeLabTest: (index: number) => void;
   resetDraft: () => void;
   setAiApplied: (val: boolean) => void;
+  setAiFilledFields: (fields: Record<string, boolean>) => void;
   setQueueItemId: (id: string | null) => void;
 
   // Prescription lifecycle
@@ -46,6 +49,7 @@ const emptyDraft: PrescriptionDraft = {
   diagnosis: '',
   advice: '',
   followUpDate: '',
+  symptoms: [],
   medicines: [],
   labTests: [],
 };
@@ -57,51 +61,92 @@ export const usePrescriptionStore = create<PrescriptionStore>((set, get) => ({
   isLoading: false,
   aiApplied: false,
   queueItemId: null,
+  aiFilledFields: {},
+  manuallyEditedFields: {},
 
   updateDraft: (partial) => {
-    set((state) => ({
-      currentDraft: { ...state.currentDraft, ...partial },
-    }));
+    set((state) => {
+      const manuallyEdited = { ...state.manuallyEditedFields };
+      if (state.aiApplied) {
+        Object.keys(partial).forEach((key) => {
+          if (['diagnosis', 'advice', 'followUpDate', 'medicines', 'labTests', 'symptoms'].includes(key)) {
+            manuallyEdited[key] = true;
+          }
+        });
+      }
+      return {
+        currentDraft: { ...state.currentDraft, ...partial },
+        manuallyEditedFields: manuallyEdited,
+      };
+    });
   },
 
   addMedicine: (med) => {
-    set((state) => ({
-      currentDraft: {
-        ...state.currentDraft,
-        medicines: [...state.currentDraft.medicines, med],
-      },
-    }));
+    set((state) => {
+      const manuallyEdited = { ...state.manuallyEditedFields };
+      if (state.aiApplied) manuallyEdited.medicines = true;
+      return {
+        currentDraft: {
+          ...state.currentDraft,
+          medicines: [...state.currentDraft.medicines, med],
+        },
+        manuallyEditedFields: manuallyEdited,
+      };
+    });
   },
 
   removeMedicine: (index) => {
-    set((state) => ({
-      currentDraft: {
-        ...state.currentDraft,
-        medicines: state.currentDraft.medicines.filter((_, i) => i !== index),
-      },
-    }));
+    set((state) => {
+      const manuallyEdited = { ...state.manuallyEditedFields };
+      if (state.aiApplied) manuallyEdited.medicines = true;
+      return {
+        currentDraft: {
+          ...state.currentDraft,
+          medicines: state.currentDraft.medicines.filter((_, i) => i !== index),
+        },
+        manuallyEditedFields: manuallyEdited,
+      };
+    });
   },
 
   addLabTest: (test) => {
-    set((state) => ({
-      currentDraft: {
-        ...state.currentDraft,
-        labTests: [...state.currentDraft.labTests, test],
-      },
-    }));
+    set((state) => {
+      const manuallyEdited = { ...state.manuallyEditedFields };
+      if (state.aiApplied) manuallyEdited.labTests = true;
+      return {
+        currentDraft: {
+          ...state.currentDraft,
+          labTests: [...state.currentDraft.labTests, test],
+        },
+        manuallyEditedFields: manuallyEdited,
+      };
+    });
   },
 
   removeLabTest: (index) => {
-    set((state) => ({
-      currentDraft: {
-        ...state.currentDraft,
-        labTests: state.currentDraft.labTests.filter((_, i) => i !== index),
-      },
-    }));
+    set((state) => {
+      const manuallyEdited = { ...state.manuallyEditedFields };
+      if (state.aiApplied) manuallyEdited.labTests = true;
+      return {
+        currentDraft: {
+          ...state.currentDraft,
+          labTests: state.currentDraft.labTests.filter((_, i) => i !== index),
+        },
+        manuallyEditedFields: manuallyEdited,
+      };
+    });
   },
 
-  resetDraft: () => set({ currentDraft: { ...emptyDraft }, currentPrescription: null, aiApplied: false, queueItemId: null }),
+  resetDraft: () => set({
+    currentDraft: { ...emptyDraft },
+    currentPrescription: null,
+    aiApplied: false,
+    queueItemId: null,
+    aiFilledFields: {},
+    manuallyEditedFields: {},
+  }),
   setAiApplied: (val) => set({ aiApplied: val }),
+  setAiFilledFields: (fields) => set({ aiFilledFields: fields }),
   setQueueItemId: (id) => set({ queueItemId: id }),
 
   createPrescription: async (doctorId) => {

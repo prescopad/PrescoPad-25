@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { Clinic, DoctorProfile } from '../types/clinic.types';
 import api from '../services/api';
+import { useAuthStore } from './useAuthStore';
 
 interface ClinicStore {
   clinic: Clinic | null;
@@ -46,25 +47,47 @@ export const useClinicStore = create<ClinicStore>((set, get) => ({
 
   loadDoctorProfile: async () => {
     try {
-      const res = await api.get('/auth/me');
-      const u = res.data.user;
-      // Load signature from local secure storage
-      const signatureBase64 = await SecureStore.getItemAsync('doctorSignature');
-      if (u) {
-        set({
-          doctorProfile: {
-            id: u.id,
-            name: u.name || '',
-            phone: u.phone || '',
-            specialty: u.specialty || '',
-            regNumber: u.reg_number || u.regNumber || '',
-            signatureBase64: signatureBase64 || null,
-            cloudId: u.id,
-          },
-        });
+      const authUser = useAuthStore.getState().user;
+      if (!authUser) return;
+
+      if (authUser.role === 'doctor') {
+        const res = await api.get('/auth/me');
+        const u = res.data.user;
+        const signatureBase64 = await SecureStore.getItemAsync('doctorSignature');
+        if (u) {
+          set({
+            doctorProfile: {
+              id: u.id,
+              name: u.name || '',
+              phone: u.phone || '',
+              specialty: u.specialty || '',
+              regNumber: u.reg_number || u.regNumber || '',
+              signatureBase64: signatureBase64 || null,
+              cloudId: u.id,
+            },
+          });
+        }
+      } else if (authUser.role === 'assistant') {
+        if (!authUser.clinicId) return;
+        const res = await api.get(`/clinic/${authUser.clinicId}/doctors`);
+        const doctors = res.data.doctors ?? [];
+        if (doctors.length > 0) {
+          const doc = doctors[0];
+          set({
+            doctorProfile: {
+              id: doc.id,
+              name: doc.name || '',
+              phone: doc.phone || '',
+              specialty: doc.specialty || '',
+              regNumber: doc.regNumber || doc.reg_number || '',
+              signatureBase64: doc.signatureUrl || doc.signature_url || doc.signature || null,
+              cloudId: doc.id,
+            },
+          });
+        }
       }
     } catch {
-      // not logged in
+      // failed to load doctor profile
     }
   },
 

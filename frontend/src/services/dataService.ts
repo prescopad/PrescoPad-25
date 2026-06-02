@@ -66,6 +66,7 @@ function mapPrescription(row: Record<string, unknown>): Prescription {
     diagnosis: row.diagnosis as string,
     advice: (row.advice as string) ?? '',
     followUpDate: (row.follow_up_date as string) ?? null,
+    symptoms: (row.symptoms as string[]) ?? [],
     pdfPath: null, // PDF is local-only
     pdfHash: (row.pdf_hash as string) ?? null,
     signature: (row.signature as string) ?? null,
@@ -247,6 +248,7 @@ export async function createPrescription(draft: PrescriptionDraft, doctorId: str
     diagnosis: draft.diagnosis,
     advice: draft.advice,
     follow_up_date: draft.followUpDate || null,
+    symptoms: draft.symptoms,
     medicines: draft.medicines.map(m => ({
       medicine_name: m.medicineName,
       type: m.type,

@@ -19,6 +19,7 @@ from typing import Optional
 
 from bson import ObjectId
 from groq import Groq
+import httpx
 
 from app.config.settings import settings
 from app.config.database import get_db
@@ -83,11 +84,57 @@ def _transcribe_sync(file_path: str, filename: str):
 
 # ── Step 2: Diarize speakers ──────────────────────────────────────────────────
 
+def _call_gemini(prompt: str, response_mime_type: Optional[str] = None) -> str:
+    if not settings.GEMINI_API_KEY:
+        raise ValueError("Gemini API key is not configured on this server")
+    
+    # Cascade model list to bypass 503 "High Demand" or 429 rate limit outages
+    models = ["gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"]
+    
+    last_err: Optional[Exception] = None
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.GEMINI_API_KEY}"
+        
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": prompt
+                }]
+            }]
+        }
+        
+        if response_mime_type:
+            payload["generationConfig"] = {
+                "responseMimeType": response_mime_type
+            }
+            
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        def do_post():
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(url, headers=headers, json=payload)
+                if response.status_code != 200:
+                    raise ValueError(f"Gemini API returned error {response.status_code}: {response.text}")
+                return response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        
+        try:
+            log.info("Attempting medical extraction via Gemini model: %s", model)
+            return _retry_sync(do_post)
+        except Exception as e:
+            log.warning("Gemini model %s failed, trying next fallback. Error: %s", model, e)
+            last_err = e
+            
+    if last_err:
+        raise last_err
+    raise ValueError("All Gemini model fallback options failed")
+
+
 def _diarize_sync(segments: list) -> list:
     if not segments:
         return []
 
-    client = _groq_client()
     numbered = "\n".join(
         f"[{i}] ({seg.start:.1f}s–{seg.end:.1f}s): {seg.text.strip()}"
         for i, seg in enumerate(segments)
@@ -109,21 +156,13 @@ Segments:
 
 Return ONLY a JSON array, no explanation, no markdown:"""
 
-    completion = _retry_sync(lambda: client.chat.completions.create(
-        model=LLAMA_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.1,
-        max_completion_tokens=2048,
-    ))
-    raw = completion.choices[0].message.content.strip()
-    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
-
     try:
+        raw = _call_gemini(prompt, response_mime_type="application/json")
+        raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
         labels = json.loads(raw)
-    except json.JSONDecodeError:
-        log.warning("Diarization JSON parse failed, falling back to alternating speakers")
-        # Alternating fallback — far better for extraction than labelling
-        # everything "Unknown", which destroys the doctor/patient signal.
+    except Exception as e:
+        log.warning("Gemini Diarization failed: %s, falling back to alternating speakers", e)
+        # Alternating fallback
         labels = [
             {"index": i, "speaker": "Doctor" if i % 2 == 0 else "Patient"}
             for i in range(len(segments))
@@ -158,7 +197,6 @@ def _extract_medical_info_sync(diarized: list, full_text: str = "") -> dict:
     if not diarized and not full_text:
         return {}
 
-    client = _groq_client()
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     today_display = datetime.now(timezone.utc).strftime("%d %B %Y")
 
@@ -243,16 +281,9 @@ Return ONLY valid JSON, no markdown, no explanation:
 
 Reminder: read any language, OUTPUT English. Empty values are correct when not discussed. Today is {today_str}. Return JSON only."""
 
-    completion = _retry_sync(lambda: client.chat.completions.create(
-        model=LLAMA_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.05,
-        max_completion_tokens=4000,
-    ))
-    raw = completion.choices[0].message.content.strip()
-    raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
-
     try:
+        raw = _call_gemini(prompt, response_mime_type="application/json")
+        raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
         result = json.loads(raw)
         log.info(
             "Extraction — diagnosis=%s advice_set=%s follow_up=%s meds=%d tests=%d",
@@ -263,8 +294,8 @@ Reminder: read any language, OUTPUT English. Empty values are correct when not d
             len(result.get("lab_tests") or []),
         )
         return result
-    except json.JSONDecodeError:
-        log.warning("Medical extraction JSON parse failed, raw: %s", raw[:200])
+    except Exception as e:
+        log.warning("Medical extraction via Gemini failed: %s, raw: %s", e, raw if 'raw' in locals() else '')
         return {}
 
 
@@ -417,6 +448,7 @@ async def process_audio_file(
             "diagnosis": extraction.get("diagnosis") or "",
             "advice": extraction.get("advice") or "",
             "follow_up_date": extraction.get("follow_up_date") or "",
+            "symptoms": extraction.get("symptoms") or [],
             "medicines": [
                 {
                     "medicine_name": m.get("medicine_name", ""),

@@ -8,8 +8,10 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 import { APP_CONFIG } from '../../constants/config';
@@ -19,6 +21,7 @@ import { useClinicStore } from '../../store/useClinicStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { generatePrescriptionPDF } from '../../services/pdfService';
 import PrescriptionActions from '../../components/PrescriptionActions';
+import SignatureModal from '../../components/SignatureModal';
 import { hashPDF } from '../../services/cryptoService';
 import { updateQueueStatus } from '../../services/dataService';
 import { QueueStatus } from '../../types/queue.types';
@@ -52,41 +55,25 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
     });
   };
 
-  const handleSignAndIssue = async () => {
-    if (!rx) return;
+  const [sigModalVisible, setSigModalVisible] = useState(false);
 
+  const signAndIssueWithSignature = async (signature: string, save: boolean) => {
     setIsSigning(true);
     try {
-      // Step 1: Refresh then check wallet balance
-      await loadBalance();
-      const affordable = canAfford();
-      if (!affordable) {
-        Alert.alert(
-          'Insufficient Balance',
-          `You need ${APP_CONFIG.wallet.currencySymbol}${APP_CONFIG.wallet.costPerPrescription} to issue a prescription. Current balance: ${APP_CONFIG.wallet.currencySymbol}${balance}`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Recharge',
-              onPress: () => navigation.getParent()?.navigate('DoctorWallet'),
-            },
-          ],
-        );
-        setIsSigning(false);
-        return;
-      }
-
-      // Step 2: Generate PDF — embed the doctor's saved digital signature
-      // (Cloudinary URL on the user profile) directly into the PDF template.
-      const rxForPdf = { ...rx, signature: user?.signatureUrl || rx.signature || null };
+      // Step 2: Generate PDF — embed the signature
+      const rxForPdf = { ...rx, signature };
       const pdfPath = await generatePrescriptionPDF(rxForPdf, clinic, doctorProfile);
 
       // Step 3: Hash PDF
       const pdfHash = await hashPDF(pdfPath);
 
-      // Step 4: Finalize prescription (backend deducts ₹1 atomically)
-      const signature = doctorProfile?.signatureBase64 || 'digital-signature';
+      // Step 4: Finalize prescription (backend deducts ₹1 atomically and persists signature)
       await finalizePrescription(rx.id, signature, pdfPath, pdfHash);
+
+      // Save signature to doctor profile for future reuse if requested
+      if (save) {
+        await useClinicStore.getState().updateDoctorProfile({ signatureBase64: signature });
+      }
 
       // Step 5: Mark queue item as completed (fire-and-forget)
       const queueItemId = usePrescriptionStore.getState().queueItemId;
@@ -102,19 +89,52 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
       navigation.replace('RxSuccess', { prescription: updatedRx || rx });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to issue prescription';
-      const isWalletError = msg.toLowerCase().includes('wallet') || msg.toLowerCase().includes('balance') || msg.toLowerCase().includes('insufficient');
-      Alert.alert(
-        isWalletError ? 'Insufficient Balance' : 'Error',
-        msg,
-        isWalletError
-          ? [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Recharge', onPress: () => navigation.getParent()?.navigate('DoctorWallet') },
-            ]
-          : [{ text: 'OK' }],
-      );
+      Alert.alert('Error', msg);
     } finally {
       setIsSigning(false);
+    }
+  };
+
+  const handleSignAndIssue = async () => {
+    if (!rx) return;
+
+    // Step 1: Refresh then check wallet balance
+    await loadBalance();
+    const affordable = canAfford();
+    if (!affordable) {
+      Alert.alert(
+        'Insufficient Balance',
+        `You need ${APP_CONFIG.wallet.currencySymbol}${APP_CONFIG.wallet.costPerPrescription} to issue a prescription. Current balance: ${APP_CONFIG.wallet.currencySymbol}${balance}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Recharge',
+            onPress: () => navigation.getParent()?.navigate('DoctorWallet'),
+          },
+        ],
+      );
+      return;
+    }
+
+    // Check if there is a saved signature on the Doctor's profile
+    if (doctorProfile?.signatureBase64) {
+      Alert.alert(
+        'Confirm Signature',
+        'You have a saved signature on your profile. Would you like to use it or draw a new one?',
+        [
+          {
+            text: 'Draw New',
+            onPress: () => setSigModalVisible(true),
+          },
+          {
+            text: 'Use Saved',
+            onPress: () => signAndIssueWithSignature(doctorProfile.signatureBase64!, false),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+    } else {
+      setSigModalVisible(true);
     }
   };
 
@@ -265,6 +285,22 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
 
           {/* Signature Area */}
           <View style={styles.signatureSection}>
+            {rx.signature && rx.signature.startsWith('M') ? (
+              <View style={styles.signatureImgContainer}>
+                <Svg width={150} height={50} viewBox="0 0 300 100">
+                  <Path
+                    d={rx.signature}
+                    stroke={COLORS.text}
+                    strokeWidth={4.5}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+              </View>
+            ) : rx.signature ? (
+              <Image source={{ uri: rx.signature }} style={styles.signatureImg} resizeMode="contain" />
+            ) : null}
             <View style={styles.signatureLine}>
               <Text style={styles.signatureDoctorName}>Dr. {doctorProfile?.name || 'Doctor'}</Text>
               {doctorProfile?.regNumber ? (
@@ -314,6 +350,15 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
           </TouchableOpacity>
         </View>
       )}
+      {/* Signature Modal */}
+      <SignatureModal
+        visible={sigModalVisible}
+        onClose={() => setSigModalVisible(false)}
+        onConfirm={(signature, save) => {
+          setSigModalVisible(false);
+          signAndIssueWithSignature(signature, save);
+        }}
+      />
     </View>
   );
 }
@@ -585,6 +630,18 @@ const styles = StyleSheet.create({
   signatureSection: {
     marginTop: SPACING.xxxl,
     alignItems: 'flex-end',
+  },
+  signatureImgContainer: {
+    width: 150,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  signatureImg: {
+    width: 150,
+    height: 50,
+    marginBottom: 4,
   },
   signatureLine: {
     borderTopWidth: 1,

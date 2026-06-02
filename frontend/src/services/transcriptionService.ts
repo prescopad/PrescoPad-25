@@ -28,6 +28,7 @@ export interface PrescriptionAutofill {
   diagnosis: string;
   advice: string;
   follow_up_date: string;
+  symptoms: string[];
   medicines: AutofillMedicine[];
   lab_tests: AutofillLabTest[];
 }

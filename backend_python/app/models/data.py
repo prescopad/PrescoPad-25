@@ -93,6 +93,7 @@ class PrescriptionRequest(BaseModel):
     advice: Optional[str] = None
     follow_up_date: Optional[str] = None
     followUpDate: Optional[str] = None
+    symptoms: Optional[List[str]] = []
     medicines: Optional[List[MedicineItem]] = []
     lab_tests: Optional[List[LabTestItem]] = []
     labTests: Optional[List[LabTestItem]] = []
@@ -109,6 +110,7 @@ class PrescriptionRequest(BaseModel):
             "diagnosis": self.diagnosis,
             "advice": self.advice,
             "follow_up_date": self.follow_up_date or self.followUpDate,
+            "symptoms": self.symptoms or [],
             "medicines": [m.normalized() for m in meds],
             "lab_tests": [t.normalized() for t in tests],
         }
@@ -135,3 +137,10 @@ class CustomLabTestRequest(BaseModel):
 class CustomLabTestUsageRequest(BaseModel):
     test_id: Optional[str] = None
     name: Optional[str] = None
+
+
+class FinalizePrescriptionRequest(BaseModel):
+    signature: Optional[str] = None
+    pdf_hash: Optional[str] = None
+    pdfHash: Optional[str] = None
+
