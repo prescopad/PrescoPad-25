@@ -1,4 +1,7 @@
-import * as SQLite from 'expo-sqlite';
+type SQLiteLikeDatabase = {
+  getFirstAsync<T>(query: string, params?: unknown[]): Promise<T | undefined>;
+  runAsync(query: string, params?: unknown[]): Promise<unknown>;
+};
 
 function generateSeedId(): string {
   const timestamp = Date.now().toString(36);
@@ -6,7 +9,7 @@ function generateSeedId(): string {
   return `${timestamp}-${random}`;
 }
 
-export async function seedMedicines(db: SQLite.SQLiteDatabase): Promise<void> {
+export async function seedMedicines(db: SQLiteLikeDatabase): Promise<void> {
   const count = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM medicines');
   if (count && count.c > 0) return;
 
@@ -163,7 +166,7 @@ export async function seedMedicines(db: SQLite.SQLiteDatabase): Promise<void> {
   }
 }
 
-export async function seedLabTests(db: SQLite.SQLiteDatabase): Promise<void> {
+export async function seedLabTests(db: SQLiteLikeDatabase): Promise<void> {
   const count = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM lab_tests');
   if (count && count.c > 0) return;
 
