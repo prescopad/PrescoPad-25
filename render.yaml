@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: prescopad-backend
+    runtime: python
+    rootDir: backend_python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: prescopad
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: "7"
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: "30"
+      - key: OTP_DEMO_MODE
+        value: "false"
+      - key: OTP_MAX_VERIFY_ATTEMPTS
+        value: "5"
+      - key: OTP_REQUESTS_PER_HOUR
+        value: "5"
+      - key: PRESCRIPTION_FEE
+        value: "1.0"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "900000"
+      - key: RATE_LIMIT_MAX
+        value: "100"

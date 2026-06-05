@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 
 // Backend URL: read from Expo config (set via BACKEND_URL env var or app.config.ts)
 const configuredUrl = Constants.expoConfig?.extra?.backendUrl as string | undefined;
-const productionBackendUrl = 'https://prescopad-25.onrender.com/api';
+const productionBackendUrl = 'https://prescopad-prescopad_v1.hf.space/api';
 
 function resolveBackendUrl(): string {
   // 1. If explicitly configured (production / EAS build), use that
