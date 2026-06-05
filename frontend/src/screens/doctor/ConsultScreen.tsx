@@ -41,25 +41,9 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
     isLoading,
   } = usePrescriptionStore();
 
-  const aiApplied = usePrescriptionStore((s) => s.aiApplied);
-  const aiFilledFields = usePrescriptionStore((s) => s.aiFilledFields);
-  const manuallyEditedFields = usePrescriptionStore((s) => s.manuallyEditedFields);
-
   const [isCreating, setIsCreating] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [newSymptom, setNewSymptom] = useState('');
-
-  // Derived: which fields were left empty after AI applied?
-  const missingSymptoms    = aiApplied && (!currentDraft.symptoms || currentDraft.symptoms.length === 0);
-  const missingDiagnosis   = aiApplied && !currentDraft.diagnosis.trim();
-  const missingMedicines   = aiApplied && currentDraft.medicines.length === 0;
-  const missingLabTests    = aiApplied && currentDraft.labTests.length === 0;
-  const missingAdvice      = aiApplied && !currentDraft.advice.trim();
-  const missingFollowUp    = aiApplied && !currentDraft.followUpDate.trim();
-
-  const isAiFilled = (field: string) => {
-    return aiApplied && aiFilledFields[field] && !manuallyEditedFields[field];
-  };
 
   const handleAddSymptom = () => {
     const trimmed = newSymptom.trim();
@@ -88,9 +72,6 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
   useEffect(() => {
     // Always store the queue item ID so finalization can mark it completed.
     setQueueItemId(queueItem.id);
-
-    // If AI/transcript data was already applied, don't touch the draft — it's pre-filled.
-    if (aiApplied) return;
 
     // Fresh consultation — initialise draft with patient info only.
     updateDraft({
@@ -258,38 +239,16 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
           </View>
         </View>
 
-        {/* AI Transcription */}
-        <TouchableOpacity
-          style={styles.aiBtn}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('AITranscription', { queueItem, patient })}
-        >
-          <View style={styles.aiBtnIcon}>
-            <Ionicons name="mic" size={18} color={COLORS.white} />
-          </View>
-          <View style={styles.aiBtnText}>
-            <Text style={styles.aiBtnTitle}>{t('consult.aiRecording')}</Text>
-            <Text style={styles.aiBtnSub}>Record, transcribe &amp; auto-fill prescription</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
-        </TouchableOpacity>
-
         {/* Symptoms */}
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>{t('consult.symptoms', 'Symptoms')}</Text>
-            {isAiFilled('symptoms') && <VoiceBadge />}
-            {missingSymptoms && <MissingBadge />}
           </View>
-          
+
           {/* Tag Chips Wrapper */}
-          <View style={[
-            styles.symptomsContainer,
-            missingSymptoms && styles.emptySectionMissing,
-            isAiFilled('symptoms') && styles.inputAiFilled
-          ]}>
+          <View style={styles.symptomsContainer}>
             {(!currentDraft.symptoms || currentDraft.symptoms.length === 0) ? (
-              <Text style={[styles.emptyText, missingSymptoms && styles.emptyTextMissing, { paddingVertical: SPACING.xs }]}>
+              <Text style={[styles.emptyText, { paddingVertical: SPACING.xs }]}>
                 No symptoms recorded. Type below to add manually.
               </Text>
             ) : (
@@ -336,15 +295,9 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>{t('consult.diagnosis')} *</Text>
-            {isAiFilled('diagnosis') && <VoiceBadge />}
-            {missingDiagnosis && <MissingBadge />}
           </View>
           <TextInput
-            style={[
-              styles.diagnosisInput, 
-              missingDiagnosis && styles.inputMissing,
-              isAiFilled('diagnosis') && styles.inputAiFilled
-            ]}
+            style={styles.diagnosisInput}
             placeholder="Enter diagnosis..."
             placeholderTextColor={COLORS.textLight}
             value={currentDraft.diagnosis}
@@ -362,8 +315,6 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
               <Text style={styles.sectionTitle}>
                 {t('consult.medicines')} ({currentDraft.medicines.length})
               </Text>
-              {isAiFilled('medicines') && <VoiceBadge />}
-              {missingMedicines && <MissingBadge />}
             </View>
             <TouchableOpacity
               style={styles.addButton}
@@ -377,38 +328,16 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
           {currentDraft.medicines.length === 0 ? (
             <TouchableOpacity
-              style={[
-                styles.emptySection, 
-                missingMedicines && styles.emptySectionMissing,
-                isAiFilled('medicines') && styles.emptySectionAiFilled
-              ]}
+              style={styles.emptySection}
               onPress={handleAddMedicine}
               activeOpacity={0.7}
             >
-              <Ionicons 
-                name="medical-outline" 
-                size={24} 
-                color={missingMedicines ? COLORS.warning : isAiFilled('medicines') ? COLORS.primary : COLORS.textLight} 
-              />
-              <Text 
-                style={[
-                  styles.emptyText, 
-                  missingMedicines && styles.emptyTextMissing,
-                  isAiFilled('medicines') && styles.emptyTextAiFilled
-                ]}
-              >
-                Tap to add medicines
-              </Text>
+              <Ionicons name="medical-outline" size={24} color={COLORS.textLight} />
+              <Text style={styles.emptyText}>Tap to add medicines</Text>
             </TouchableOpacity>
           ) : (
             currentDraft.medicines.map((med: MedicineDraft, index: number) => (
-              <View 
-                key={`med-${index}`} 
-                style={[
-                  styles.itemCard,
-                  isAiFilled('medicines') && styles.itemCardAiFilled
-                ]}
-              >
+              <View key={`med-${index}`} style={styles.itemCard}>
                 <View style={styles.itemContent}>
                   <View style={styles.itemHeader}>
                     <Text style={styles.itemName}>{med.medicineName}</Text>
@@ -441,8 +370,6 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
               <Text style={styles.sectionTitle}>
                 {t('consult.labTests')} ({currentDraft.labTests.length})
               </Text>
-              {isAiFilled('labTests') && <VoiceBadge />}
-              {missingLabTests && <MissingBadge />}
             </View>
             <TouchableOpacity
               style={styles.addButton}
@@ -456,38 +383,16 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
           {currentDraft.labTests.length === 0 ? (
             <TouchableOpacity
-              style={[
-                styles.emptySection, 
-                missingLabTests && styles.emptySectionMissing,
-                isAiFilled('labTests') && styles.emptySectionAiFilled
-              ]}
+              style={styles.emptySection}
               onPress={handleAddLabTest}
               activeOpacity={0.7}
             >
-              <Ionicons 
-                name="flask-outline" 
-                size={24} 
-                color={missingLabTests ? COLORS.warning : isAiFilled('labTests') ? COLORS.primary : COLORS.textLight} 
-              />
-              <Text 
-                style={[
-                  styles.emptyText, 
-                  missingLabTests && styles.emptyTextMissing,
-                  isAiFilled('labTests') && styles.emptyTextAiFilled
-                ]}
-              >
-                Tap to add lab tests
-              </Text>
+              <Ionicons name="flask-outline" size={24} color={COLORS.textLight} />
+              <Text style={styles.emptyText}>Tap to add lab tests</Text>
             </TouchableOpacity>
           ) : (
             currentDraft.labTests.map((test: LabTestDraft, index: number) => (
-              <View 
-                key={`test-${index}`} 
-                style={[
-                  styles.itemCard,
-                  isAiFilled('labTests') && styles.itemCardAiFilled
-                ]}
-              >
+              <View key={`test-${index}`} style={styles.itemCard}>
                 <View style={styles.itemContent}>
                   <View style={styles.itemHeader}>
                     <Text style={styles.itemName}>{test.testName}</Text>
@@ -512,15 +417,9 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>Additional Advice</Text>
-            {isAiFilled('advice') && <VoiceBadge />}
-            {missingAdvice && <MissingBadge />}
           </View>
           <TextInput
-            style={[
-              styles.adviceInput, 
-              missingAdvice && styles.inputMissing,
-              isAiFilled('advice') && styles.inputAiFilled
-            ]}
+            style={styles.adviceInput}
             placeholder="Any additional advice for the patient..."
             placeholderTextColor={COLORS.textLight}
             value={currentDraft.advice}
@@ -535,19 +434,13 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>{t('consult.followUp')}</Text>
-            {isAiFilled('followUpDate') && <VoiceBadge />}
-            {missingFollowUp && <MissingBadge />}
           </View>
           <TouchableOpacity
-            style={[
-              styles.followUpRow, 
-              missingFollowUp && styles.inputMissing,
-              isAiFilled('followUpDate') && styles.inputAiFilled
-            ]}
+            style={styles.followUpRow}
             onPress={() => setShowDatePicker(true)}
             activeOpacity={0.7}
           >
-            <Ionicons name="calendar-outline" size={20} color={missingFollowUp ? COLORS.warning : COLORS.textMuted} />
+            <Ionicons name="calendar-outline" size={20} color={COLORS.textMuted} />
             <Text style={[styles.followUpInput, !currentDraft.followUpDate && { color: COLORS.textLight }]}>
               {currentDraft.followUpDate || t('consult.pickDate')}
             </Text>
@@ -597,48 +490,6 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
   );
 }
 
-function MissingBadge() {
-  return (
-    <View style={badgeStyles.badge}>
-      <Ionicons name="alert-circle-outline" size={12} color={COLORS.warning} />
-      <Text style={badgeStyles.text}>Not in conversation</Text>
-    </View>
-  );
-}
-
-function VoiceBadge() {
-  return (
-    <View style={badgeStyles.voiceBadge}>
-      <Ionicons name="mic" size={12} color={COLORS.primary} style={{ marginRight: 2 }} />
-      <Text style={badgeStyles.voiceText}>AI Filled</Text>
-    </View>
-  );
-}
-
-const badgeStyles = StyleSheet.create({
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: COLORS.warningLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  text: { fontSize: 10, fontWeight: '600', color: COLORS.warning },
-  voiceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: COLORS.primaryLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  voiceText: { fontSize: 10, fontWeight: '600', color: COLORS.primary },
-});
 
 const styles = StyleSheet.create({
   container: {
@@ -651,30 +502,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: SPACING.lg,
   },
-
-  // AI Button
-  aiBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primarySurface,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    borderWidth: 1.5,
-    borderColor: COLORS.primaryLight,
-    gap: SPACING.sm,
-  },
-  aiBtnIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  aiBtnText: { flex: 1 },
-  aiBtnTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  aiBtnSub: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
 
   // Patient Card
   patientCard: {
@@ -754,20 +581,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.text,
-  },
-
-  // Highlighted (AI found nothing for this field)
-  inputMissing: {
-    borderColor: COLORS.warning,
-    borderWidth: 1.5,
-    backgroundColor: COLORS.warningLight,
-  },
-  emptySectionMissing: {
-    borderColor: COLORS.warning,
-    backgroundColor: COLORS.warningLight,
-  },
-  emptyTextMissing: {
-    color: COLORS.warning,
   },
 
   // Inputs
@@ -975,21 +788,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // AI-filled state soft highlights
-  inputAiFilled: {
-    borderColor: COLORS.primary,
-    borderWidth: 1.5,
-    backgroundColor: COLORS.primarySurface,
-  },
-  emptySectionAiFilled: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primarySurface,
-  },
-  emptyTextAiFilled: {
-    color: COLORS.primary,
-  },
-  itemCardAiFilled: {
-    borderColor: COLORS.primaryLight,
-    backgroundColor: COLORS.primarySurface,
-  },
 });

@@ -1,8 +1,4 @@
-"""Admin service — platform-wide aggregations for the Admin Interface.
-
-All read-only. Mutations (promote / deactivate users) live in admin routes
-that call dedicated helpers below.
-"""
+"""Admin service — platform-wide aggregations and CRUD for the Admin Interface."""
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -19,12 +15,10 @@ async def get_overview() -> dict:
     week_start = now - timedelta(days=7)
     month_start = now - timedelta(days=30)
 
-    # Counts by role
     doctors = await db.users.count_documents({"role": "doctor", "is_active": True})
     assistants = await db.users.count_documents({"role": "assistant", "is_active": True})
     admins = await db.users.count_documents({"role": "admin", "is_active": True})
     total_clinics = await db.clinics.count_documents({})
-
     total_patients = await db.patients.count_documents({"is_deleted": {"$ne": True}})
 
     rx_total = await db.prescriptions.count_documents({"is_deleted": {"$ne": True}})
@@ -41,7 +35,6 @@ async def get_overview() -> dict:
         "created_at": {"$gte": month_start}, "is_deleted": {"$ne": True}
     })
 
-    # Revenue = total wallet credits across all users (platform money in)
     rev_pipeline = [
         {"$group": {"_id": "$type", "total": {"$sum": "$amount"}}}
     ]
@@ -56,7 +49,6 @@ async def get_overview() -> dict:
         elif row["_id"] == "refund":
             rev_total_refund = row["total"]
 
-    # Active doctors in last 15 minutes
     online_threshold = now - timedelta(minutes=15)
     online_doctors = await db.users.count_documents({
         "role": "doctor",
@@ -137,6 +129,46 @@ async def list_clinics(search: Optional[str] = None, limit: int = 100, offset: i
     return {"total": total, "clinics": items}
 
 
+async def create_clinic(data: dict) -> dict:
+    db = get_db()
+    if not data.get("name", "").strip():
+        raise ValueError("Clinic name is required")
+    now = datetime.now(timezone.utc)
+    doc = {
+        "name": data["name"].strip(),
+        "address": data.get("address", ""),
+        "phone": data.get("phone", ""),
+        "city": data.get("city", ""),
+        "is_active": True,
+        "solo_mode": True,
+        "created_at": now,
+        "updated_at": now,
+    }
+    result = await db.clinics.insert_one(doc)
+    clinic = await db.clinics.find_one({"_id": result.inserted_id})
+    return serialize_doc(clinic)
+
+
+async def update_clinic(clinic_id: str, data: dict) -> dict:
+    db = get_db()
+    updates = {k: v for k, v in data.items() if v is not None}
+    if not updates:
+        raise ValueError("No fields to update")
+    updates["updated_at"] = datetime.now(timezone.utc)
+    result = await db.clinics.update_one({"_id": ObjectId(clinic_id)}, {"$set": updates})
+    if result.matched_count == 0:
+        raise ValueError("Clinic not found")
+    clinic = await db.clinics.find_one({"_id": ObjectId(clinic_id)})
+    return serialize_doc(clinic)
+
+
+async def delete_clinic(clinic_id: str) -> None:
+    db = get_db()
+    result = await db.clinics.delete_one({"_id": ObjectId(clinic_id)})
+    if result.deleted_count == 0:
+        raise ValueError("Clinic not found")
+
+
 async def list_prescriptions(
     clinic_id: Optional[str] = None,
     limit: int = 100,
@@ -178,6 +210,25 @@ async def revenue_breakdown(period: str = "month") -> dict:
     }
 
 
+async def list_patients(
+    search: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict:
+    db = get_db()
+    q: dict = {"is_deleted": {"$ne": True}}
+    if search:
+        import re
+        q["$or"] = [
+            {"name": {"$regex": re.escape(search), "$options": "i"}},
+            {"phone": {"$regex": re.escape(search), "$options": "i"}},
+        ]
+    total = await db.patients.count_documents(q)
+    cursor = db.patients.find(q).sort("created_at", -1).skip(offset).limit(limit)
+    items = [serialize_doc(p) async for p in cursor]
+    return {"total": total, "patients": items}
+
+
 async def set_user_active(user_id: str, is_active: bool) -> dict:
     db = get_db()
     await db.users.update_one(
@@ -206,3 +257,13 @@ async def promote_to_admin(user_id: str) -> dict:
     doc.pop("password_hash", None)
     doc.pop("otp_hash", None)
     return doc
+
+
+async def delete_user(user_id: str) -> None:
+    db = get_db()
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise ValueError("User not found")
+    if user.get("role") == "admin":
+        raise ValueError("Cannot delete admin users")
+    await db.users.delete_one({"_id": ObjectId(user_id)})

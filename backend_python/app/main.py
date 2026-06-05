@@ -1,7 +1,9 @@
+import asyncio
 import logging
 
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,14 +15,32 @@ from app.config.database import connect_db, close_db
 from app.config.settings import settings
 from app.routes import (
     auth, wallet, clinic, connection, data,
-    notification, analytics, transcription, admin,
+    notification, analytics, admin,
 )
+
+KEEPALIVE_INTERVAL_SECONDS = 14 * 60  # 14 minutes — keeps Render free-tier awake
+
+
+async def _keepalive_loop():
+    """Ping our own /api/health every 14 minutes so Render never idles us out."""
+    await asyncio.sleep(60)  # wait for server to fully start before first ping
+    while True:
+        try:
+            base = f"http://localhost:{settings.PORT}"
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(f"{base}/api/health")
+            log.info("Keep-alive ping: %s", resp.status_code)
+        except Exception as exc:
+            log.warning("Keep-alive ping failed: %s", exc)
+        await asyncio.sleep(KEEPALIVE_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_db()
+    task = asyncio.create_task(_keepalive_loop())
     yield
+    task.cancel()
     await close_db()
 
 
@@ -56,7 +76,6 @@ app.include_router(connection.router)
 app.include_router(data.router)
 app.include_router(notification.router)
 app.include_router(analytics.router)
-app.include_router(transcription.router)
 app.include_router(admin.router)
 
 

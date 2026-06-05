@@ -32,12 +32,24 @@ export interface AdminClinic {
   name: string;
   phone?: string;
   address?: string;
+  city?: string;
   owner_id?: string;
+  is_active?: boolean;
   solo_mode?: boolean;
   soloMode?: boolean;
   doctorCount: number;
   assistantCount: number;
   prescriptionCount: number;
+  created_at?: string;
+}
+
+export interface AdminPatient {
+  id: string;
+  name: string;
+  phone?: string;
+  age?: number;
+  gender?: string;
+  clinic_id?: string;
   created_at?: string;
 }
 
@@ -57,6 +69,8 @@ export interface AdminRevenue {
   platformRevenue: number;
   generatedAt: string;
 }
+
+// ── Fetch ─────────────────────────────────────────────────────────────────────
 
 export async function fetchAdminOverview(): Promise<AdminOverview> {
   const r = await api.get('/admin/overview');
@@ -82,6 +96,15 @@ export async function fetchAdminClinics(params: {
   return { total: r.data.total ?? 0, clinics: r.data.clinics ?? [] };
 }
 
+export async function fetchAdminPatients(params: {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ total: number; patients: AdminPatient[] }> {
+  const r = await api.get('/admin/patients', { params });
+  return { total: r.data.total ?? 0, patients: r.data.patients ?? [] };
+}
+
 export async function fetchAdminPrescriptions(params: {
   clinicId?: string;
   limit?: number;
@@ -98,6 +121,8 @@ export async function fetchAdminRevenue(period: 'today' | 'week' | 'month'): Pro
   return r.data;
 }
 
+// ── User mutations ────────────────────────────────────────────────────────────
+
 export async function setAdminUserActive(userId: string, isActive: boolean): Promise<AdminUser> {
   const r = await api.put(`/admin/users/${userId}/active`, null, { params: { is_active: isActive } });
   return r.data.user;
@@ -106,4 +131,32 @@ export async function setAdminUserActive(userId: string, isActive: boolean): Pro
 export async function promoteAdminUser(userId: string): Promise<AdminUser> {
   const r = await api.put(`/admin/users/${userId}/promote`);
   return r.data.user;
+}
+
+export async function deleteAdminUser(userId: string): Promise<void> {
+  await api.delete(`/admin/users/${userId}`);
+}
+
+// ── Clinic mutations ──────────────────────────────────────────────────────────
+
+export async function createAdminClinic(data: {
+  name: string;
+  address?: string;
+  phone?: string;
+  city?: string;
+}): Promise<AdminClinic> {
+  const r = await api.post('/admin/clinics', data);
+  return r.data.clinic;
+}
+
+export async function updateAdminClinic(
+  clinicId: string,
+  data: { name?: string; address?: string; phone?: string; city?: string; is_active?: boolean },
+): Promise<AdminClinic> {
+  const r = await api.put(`/admin/clinics/${clinicId}`, data);
+  return r.data.clinic;
+}
+
+export async function deleteAdminClinic(clinicId: string): Promise<void> {
+  await api.delete(`/admin/clinics/${clinicId}`);
 }

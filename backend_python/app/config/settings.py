@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     JWT_REFRESH_SECRET: str
     JWT_REFRESH_EXPIRES_IN: int = 30
 
-    # OTP — demo mode must be explicitly enabled. Default is OFF for safety.
-    OTP_DEMO_MODE: bool = True
+    # OTP — set to True only for local dev when you don't have a Fast2SMS key.
+    OTP_DEMO_MODE: bool = False
     OTP_DEMO_CODE: str = "123456"
     FAST2SMS_API_KEY: Optional[str] = None
 
@@ -26,16 +26,10 @@ class Settings(BaseSettings):
     # Wallet
     PRESCRIPTION_FEE: float = 1.0
 
-    # Transcription upload guard
-    MAX_AUDIO_UPLOAD_BYTES: int = 25 * 1024 * 1024  # 25 MB
-
     RATE_LIMIT_WINDOW_MS: int = 900000
     RATE_LIMIT_MAX: int = 100
 
     ALLOWED_ORIGINS: Optional[str] = None
-
-    GROQ_API_KEY: Optional[str] = None
-    GEMINI_API_KEY: Optional[str] = None
 
     # Admin seed — only used when NODE_ENV != "production" and explicitly enabled
     SEED_ADMIN: bool = False

@@ -58,6 +58,7 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
   const [sigModalVisible, setSigModalVisible] = useState(false);
 
   const signAndIssueWithSignature = async (signature: string, save: boolean) => {
+    if (!rx) return;
     setIsSigning(true);
     try {
       // Step 2: Generate PDF — embed the signature
@@ -86,7 +87,7 @@ export default function PrescriptionPreviewScreen({ navigation, route }: Props):
 
       // Step 7: Navigate to success
       const updatedRx = usePrescriptionStore.getState().currentPrescription;
-      navigation.replace('RxSuccess', { prescription: updatedRx || rx });
+      navigation.replace('RxSuccess', { prescription: updatedRx ?? rx });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Failed to issue prescription';
       Alert.alert('Error', msg);
