@@ -19,17 +19,9 @@ export default function LoginScreen({ navigation, route }: Props): React.JSX.Ele
   const [phone, setPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const title = role === 'doctor' 
-    ? t('auth.doctorLogin') 
-    : role === 'admin'
-      ? 'System Admin Login'
-      : t('auth.assistantLogin');
-
-  const icon = role === 'doctor' 
-    ? 'medkit' 
-    : role === 'admin'
-      ? 'shield-checkmark'
-      : 'people';
+  const isDoctor = role === 'doctor';
+  const title = isDoctor ? t('auth.doctorLogin') : t('auth.assistantLogin');
+  const icon: keyof typeof Ionicons.glyphMap = isDoctor ? 'medkit' : 'people';
 
   const handleSendOTP = async () => {
     if (phone.length !== 10) {
@@ -61,7 +53,7 @@ export default function LoginScreen({ navigation, route }: Props): React.JSX.Ele
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <View style={[styles.iconCircle, { backgroundColor: role === 'doctor' ? COLORS.primary : role === 'admin' ? COLORS.text : '#059669' }]}>
+        <View style={[styles.iconCircle, { backgroundColor: isDoctor ? COLORS.primary : '#059669' }]}>
           <Ionicons name={icon} size={32} color={COLORS.white} />
         </View>
 

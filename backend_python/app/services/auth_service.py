@@ -20,6 +20,15 @@ async def send_otp(phone: str, role: str) -> dict:
     col = get_user_collection(db, role)
     user = await col.find_one({"phone": phone})
 
+    # If a doctor-role request doesn't find the user in doctors, check admins.
+    # This lets admins log in seamlessly via the Doctor login screen.
+    if user is None and role == "doctor":
+        admin_user = await db.admins.find_one({"phone": phone})
+        if admin_user:
+            col = db.admins
+            role = "admin"
+            user = admin_user
+
     # Rate-limit OTP requests per phone+role.
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
     if user:
@@ -122,6 +131,14 @@ async def verify_otp_and_login(phone: str, otp: str, role: str) -> dict:
     db = get_db()
     col = get_user_collection(db, role)
     user = await col.find_one({"phone": phone})
+
+    # If a doctor-role request doesn't find the user in doctors, check admins.
+    if user is None and role == "doctor":
+        admin_user = await db.admins.find_one({"phone": phone})
+        if admin_user:
+            col = db.admins
+            role = "admin"
+            user = admin_user
     if not user:
         raise ValueError("Invalid OTP")  # don't leak account existence
 

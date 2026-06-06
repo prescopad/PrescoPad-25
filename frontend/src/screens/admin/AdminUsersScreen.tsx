@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, SectionList, TextInput, TouchableOpacity, ActivityIndicator,
-  RefreshControl, Alert, StatusBar,
+  RefreshControl, Alert, StatusBar, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -45,6 +45,23 @@ export default function AdminUsersScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
 
+  // Works on both native (Alert) and web (window.confirm).
+  const webConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    confirmLabel = 'Confirm',
+  ) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}\n\n${message}`)) onConfirm();
+    } else {
+      Alert.alert(title, message, [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: confirmLabel, style: 'destructive', onPress: onConfirm },
+      ]);
+    }
+  };
+
   const roleParam = activeRole === 'all' ? undefined : activeRole as 'doctor' | 'assistant' | 'admin';
 
   const load = useCallback(async () => {
@@ -71,55 +88,51 @@ export default function AdminUsersScreen(): React.JSX.Element {
 
   const onToggleActive = async (u: AdminUser) => {
     const isActive = (u.isActive ?? u.is_active) !== false;
-    try {
-      const updated = await setAdminUserActive(u.id, !isActive);
-      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
-    } catch (e) {
-      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.updateFailed'));
-    }
+    const action = isActive ? 'Deactivate' : 'Reactivate';
+    webConfirm(
+      `${action} User`,
+      `Are you sure you want to ${action.toLowerCase()} ${u.name ?? u.phone}?`,
+      async () => {
+        try {
+          const updated = await setAdminUserActive(u.id, !isActive);
+          setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
+        } catch (e) {
+          Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.updateFailed'));
+        }
+      },
+      action,
+    );
   };
 
   const onPromote = async (u: AdminUser) => {
-    Alert.alert(
+    webConfirm(
       t('admin.promoteConfirm'),
       t('admin.promoteMessage', { name: u.name ?? u.phone }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('admin.promote'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const updated = await promoteAdminUser(u.id);
-              setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
-            } catch (e) {
-              Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.promoteFailed'));
-            }
-          },
-        },
-      ],
+      async () => {
+        try {
+          const updated = await promoteAdminUser(u.id);
+          setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
+        } catch (e) {
+          Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.promoteFailed'));
+        }
+      },
+      t('admin.promote'),
     );
   };
 
   const onDelete = async (u: AdminUser) => {
-    Alert.alert(
+    webConfirm(
       'Delete User',
       `Are you sure you want to permanently delete ${u.name ?? u.phone}? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteAdminUser(u.id);
-              setUsers((prev) => prev.filter((x) => x.id !== u.id));
-            } catch (e) {
-              Alert.alert(t('common.error'), e instanceof Error ? e.message : 'Failed to delete user');
-            }
-          },
-        },
-      ],
+      async () => {
+        try {
+          await deleteAdminUser(u.id);
+          setUsers((prev) => prev.filter((x) => x.id !== u.id));
+        } catch (e) {
+          Alert.alert(t('common.error'), e instanceof Error ? e.message : 'Failed to delete user');
+        }
+      },
+      'Delete',
     );
   };
 

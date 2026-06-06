@@ -61,7 +61,8 @@ export default function AdminClinicsScreen(): React.JSX.Element {
 
   const onSave = async () => {
     if (!form.name.trim()) {
-      Alert.alert('Error', 'Clinic name is required');
+      if (Platform.OS === 'web') { window.alert('Clinic name is required'); }
+      else { Alert.alert('Error', 'Clinic name is required'); }
       return;
     }
     setSaving(true);
@@ -74,7 +75,8 @@ export default function AdminClinicsScreen(): React.JSX.Element {
           city: form.city.trim() || undefined,
         });
         setClinics((prev) => prev.map((c) => (c.id === editingClinic.id ? { ...c, ...updated } : c)));
-        Alert.alert('Success', 'Clinic updated successfully');
+        if (Platform.OS === 'web') { window.alert('Clinic updated successfully'); }
+        else { Alert.alert('Success', 'Clinic updated successfully'); }
       } else {
         const created = await createAdminClinic({
           name: form.name.trim(),
@@ -83,36 +85,45 @@ export default function AdminClinicsScreen(): React.JSX.Element {
           city: form.city.trim() || undefined,
         });
         setClinics((prev) => [{ ...created, doctorCount: 0, assistantCount: 0, prescriptionCount: 0 }, ...prev]);
-        Alert.alert('Success', 'Clinic created successfully');
+        if (Platform.OS === 'web') { window.alert('Clinic created successfully'); }
+        else { Alert.alert('Success', 'Clinic created successfully'); }
       }
       setModalVisible(false);
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save clinic');
+      const msg = e instanceof Error ? e.message : 'Failed to save clinic';
+      if (Platform.OS === 'web') { window.alert(`Error: ${msg}`); }
+      else { Alert.alert('Error', msg); }
     } finally {
       setSaving(false);
     }
   };
 
   const onDelete = (clinic: AdminClinic) => {
-    Alert.alert(
-      'Delete Clinic',
-      `Are you sure you want to delete "${clinic.name}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteAdminClinic(clinic.id);
-              setClinics((prev) => prev.filter((c) => c.id !== clinic.id));
-            } catch (e) {
-              Alert.alert('Error', e instanceof Error ? e.message : 'Failed to delete clinic');
-            }
-          },
-        },
-      ],
-    );
+    const doDelete = async () => {
+      try {
+        await deleteAdminClinic(clinic.id);
+        setClinics((prev) => prev.filter((c) => c.id !== clinic.id));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to delete clinic';
+        if (Platform.OS === 'web') { window.alert(`Error: ${msg}`); }
+        else { Alert.alert('Error', msg); }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Delete Clinic\n\nAre you sure you want to delete "${clinic.name}"? This cannot be undone.`)) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(
+        'Delete Clinic',
+        `Are you sure you want to delete "${clinic.name}"? This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: doDelete },
+        ],
+      );
+    }
   };
 
   return (

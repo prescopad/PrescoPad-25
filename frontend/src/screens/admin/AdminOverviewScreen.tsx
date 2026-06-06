@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, StatusBar,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, StatusBar, Alert, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +20,17 @@ export default function AdminOverviewScreen(): React.JSX.Element {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+
+  const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to log out?')) logout();
+    } else {
+      Alert.alert('Logout', 'Are you sure you want to log out?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Logout', style: 'destructive', onPress: () => logout() },
+      ]);
+    }
+  };
 
   const load = useCallback(async () => {
     setError(null);
@@ -57,7 +68,9 @@ export default function AdminOverviewScreen(): React.JSX.Element {
           <Text style={styles.headerTitle}>{t('admin.dashboard')}</Text>
           <Text style={styles.headerSubtitle}>{user?.name ?? user?.phone}</Text>
         </View>
-        <Ionicons name="log-out-outline" size={24} color={COLORS.white} onPress={logout} />
+        <TouchableOpacity onPress={handleLogout} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="log-out-outline" size={24} color={COLORS.white} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
