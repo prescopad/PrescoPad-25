@@ -53,6 +53,14 @@ export default function LandingScreen({ navigation }: Props): React.JSX.Element 
           </View>
           <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} />
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.adminLoginBtn}
+          onPress={() => navigation.navigate('Login', { role: 'admin' })}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.adminLoginText}>System Admin Login</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -133,5 +141,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+  adminLoginBtn: {
+    marginTop: SPACING.xxl,
+    alignItems: 'center',
+    padding: SPACING.md,
+  },
+  adminLoginText: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
