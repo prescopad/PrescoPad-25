@@ -84,9 +84,13 @@ async def get_analytics(clinic_id: str, period: str = "today") -> dict:
             q_cancelled = row["count"]
 
     # Wallet earnings — scope by clinic's doctor user_ids.
-    doctor_ids = [str(u["_id"]) async for u in db.users.find(
-        {"clinic_id": clinic_id, "role": {"$in": ["doctor", "admin"]}}, {"_id": 1}
+    doctor_ids = [str(u["_id"]) async for u in db.doctors.find(
+        {"clinic_id": clinic_id}, {"_id": 1}
     )]
+    admin_ids = [str(u["_id"]) async for u in db.admins.find(
+        {"clinic_id": clinic_id}, {"_id": 1}
+    )]
+    doctor_ids.extend(admin_ids)
     total_debit = 0.0
     total_credit = 0.0
     if doctor_ids:

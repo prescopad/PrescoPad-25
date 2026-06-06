@@ -6,7 +6,7 @@ from app.models.common import serialize_doc
 
 async def invite_assistant(doctor_id: str, clinic_id: str, assistant_phone: str) -> dict:
     db = get_db()
-    assistant = await db.users.find_one({"phone": assistant_phone, "role": "assistant"})
+    assistant = await db.assistants.find_one({"phone": assistant_phone})
     if not assistant:
         raise ValueError("Assistant not found with that phone number")
 
@@ -35,7 +35,7 @@ async def invite_assistant(doctor_id: str, clinic_id: str, assistant_phone: str)
 
 async def request_join(assistant_id: str, doctor_code: str) -> dict:
     db = get_db()
-    doctor = await db.users.find_one({"doctor_code": doctor_code, "role": "doctor"})
+    doctor = await db.doctors.find_one({"doctor_code": doctor_code})
     if not doctor:
         raise ValueError("Doctor not found with that code")
 
@@ -77,7 +77,7 @@ async def accept_request(request_id: str, user_id: str, role: str) -> dict:
         {"_id": ObjectId(request_id)},
         {"$set": {"status": "accepted", "updated_at": datetime.now(timezone.utc)}}
     )
-    await db.users.update_one(
+    await db.assistants.update_one(
         {"_id": ObjectId(req["assistant_id"])},
         {"$set": {"clinic_id": req.get("clinic_id"), "updated_at": datetime.now(timezone.utc)}}
     )
@@ -126,13 +126,13 @@ async def get_pending(user_id: str, role: str) -> list:
 
         # Attach human-readable names so the frontend can display them
         try:
-            doctor = await db.users.find_one({"_id": ObjectId(doc["doctor_id"])})
+            doctor = await db.doctors.find_one({"_id": ObjectId(doc["doctor_id"])})
             doc["doctor_name"] = doctor.get("name") if doctor else None
         except Exception:
             doc["doctor_name"] = None
 
         try:
-            assistant = await db.users.find_one({"_id": ObjectId(doc["assistant_id"])})
+            assistant = await db.assistants.find_one({"_id": ObjectId(doc["assistant_id"])})
             if assistant:
                 doc["assistant_name"] = assistant.get("name")
                 doc["assistant_phone"] = assistant.get("phone")
@@ -163,27 +163,40 @@ async def get_pending(user_id: str, role: str) -> list:
 
 async def get_team(clinic_id: str) -> list:
     db = get_db()
-    cursor = db.users.find({
+    team = []
+    
+    # Doctors
+    cursor = db.doctors.find({
         "clinic_id": clinic_id,
-        "role": {"$in": ["doctor", "assistant"]},
         "is_active": True,
     })
-    team = []
     async for u in cursor:
         doc = serialize_doc(u)
         doc.pop("password_hash", None)
         doc.pop("otp_hash", None)
         team.append(doc)
+
+    # Assistants
+    cursor = db.assistants.find({
+        "clinic_id": clinic_id,
+        "is_active": True,
+    })
+    async for u in cursor:
+        doc = serialize_doc(u)
+        doc.pop("password_hash", None)
+        doc.pop("otp_hash", None)
+        team.append(doc)
+
     return team
 
 
 async def disconnect_assistant(doctor_id: str, clinic_id: str, assistant_id: str):
     db = get_db()
-    assistant = await db.users.find_one({"_id": ObjectId(assistant_id), "clinic_id": clinic_id})
+    assistant = await db.assistants.find_one({"_id": ObjectId(assistant_id), "clinic_id": clinic_id})
     if not assistant:
         raise ValueError("Assistant not in your clinic")
 
-    await db.users.update_one(
+    await db.assistants.update_one(
         {"_id": ObjectId(assistant_id)},
         {"$set": {"clinic_id": None, "updated_at": datetime.now(timezone.utc)}}
     )
@@ -194,8 +207,8 @@ async def disconnect_assistant(doctor_id: str, clinic_id: str, assistant_id: str
 
     # If no assistants remain, flip the clinic back to solo_mode so the doctor
     # regains AddPatient / PatientSearch capability.
-    remaining = await db.users.count_documents({
-        "clinic_id": clinic_id, "role": "assistant", "is_active": True,
+    remaining = await db.assistants.count_documents({
+        "clinic_id": clinic_id, "is_active": True,
     })
     if remaining == 0:
         await db.clinics.update_one(

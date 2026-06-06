@@ -29,19 +29,39 @@ async def main(phone: str, password: str | None, promote: bool):
     db = client[settings.MONGODB_DB_NAME]
     now = datetime.now(timezone.utc)
 
-    existing = await db.users.find_one({"phone": phone})
+    # 1. Search for existing user across all three collections
+    existing = None
+    existing_role = None
+    for role, col in [("doctor", db.doctors), ("assistant", db.assistants), ("admin", db.admins)]:
+        user = await col.find_one({"phone": phone})
+        if user:
+            existing = user
+            existing_role = role
+            break
 
     if existing and promote:
-        await db.users.update_one(
-            {"_id": existing["_id"]},
-            {"$set": {"role": "admin", "is_profile_complete": True, "updated_at": now}},
-        )
+        if existing_role == "admin":
+            print(f"User {phone} is already an admin.")
+            client.close()
+            return
+        
+        # Delete from old collection
+        if existing_role == "doctor":
+            await db.doctors.delete_one({"_id": existing["_id"]})
+        elif existing_role == "assistant":
+            await db.assistants.delete_one({"_id": existing["_id"]})
+
+        # Insert into admins
+        existing["role"] = "admin"
+        existing["is_profile_complete"] = True
+        existing["updated_at"] = now
+        await db.admins.insert_one(existing)
         print(f"Promoted user {phone} (id={existing['_id']}) to admin.")
         client.close()
         return
 
     if existing and not promote:
-        print(f"User with phone {phone} already exists. Re-run with --promote to make them admin.")
+        print(f"User with phone {phone} already exists in {existing_role}s collection. Re-run with --promote to make them admin.")
         client.close()
         sys.exit(2)
 
@@ -64,7 +84,7 @@ async def main(phone: str, password: str | None, promote: bool):
         "created_at": now,
         "updated_at": now,
     }
-    result = await db.users.insert_one(user_doc)
+    result = await db.admins.insert_one(user_doc)
     print(f"Created admin user phone={phone} id={result.inserted_id}")
     client.close()
 

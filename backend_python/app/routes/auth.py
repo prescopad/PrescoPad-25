@@ -83,9 +83,9 @@ async def refresh_token(body: RefreshTokenRequest):
 async def complete_registration(request: Request, body: CompleteRegistrationRequest):
     user: TokenData = await get_current_user(request)
     try:
-        result = await auth_service.complete_registration(user.user_id, body.normalized())
+        result = await auth_service.complete_registration(user.user_id, user.role, body.normalized())
         # re-issue tokens with updated user data
-        tokens = await auth_service.refresh_session(user.user_id)
+        tokens = await auth_service.refresh_session(user.user_id, user.role)
         return _ok({
             "message": "Profile completed",
             "access_token": tokens["access_token"],
@@ -102,7 +102,7 @@ async def complete_registration(request: Request, body: CompleteRegistrationRequ
 async def refresh_session(request: Request):
     user: TokenData = await get_current_user(request)
     try:
-        result = await auth_service.refresh_session(user.user_id)
+        result = await auth_service.refresh_session(user.user_id, user.role)
         return _ok({
             "access_token": result["access_token"],
             "refresh_token": result["refresh_token"],
@@ -116,7 +116,7 @@ async def refresh_session(request: Request):
 async def get_me(request: Request):
     user: TokenData = await get_current_user(request)
     try:
-        result = await auth_service.get_me(user.user_id)
+        result = await auth_service.get_me(user.user_id, user.role)
         return _ok({"user": result})
     except ValueError as e:
         return _err(str(e), 404)
@@ -128,7 +128,7 @@ async def get_me(request: Request):
 async def update_profile(request: Request, body: UpdateProfileRequest):
     user: TokenData = await get_current_user(request)
     try:
-        result = await auth_service.update_profile(user.user_id, body.normalized())
+        result = await auth_service.update_profile(user.user_id, user.role, body.normalized())
         return _ok({"user": result, "message": "Profile updated"})
     except Exception as e:
         return _err(str(e), 500)
@@ -137,5 +137,5 @@ async def update_profile(request: Request, body: UpdateProfileRequest):
 @router.post("/heartbeat")
 async def heartbeat(request: Request):
     user: TokenData = await get_current_user(request)
-    await auth_service.heartbeat(user.user_id)
+    await auth_service.heartbeat(user.user_id, user.role)
     return _ok({"message": "OK"})

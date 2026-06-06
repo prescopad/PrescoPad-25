@@ -19,7 +19,7 @@ async def get_clinics(search: str = None) -> list:
         owner_id = doc.get("owner_id")
         if owner_id:
             try:
-                owner = await db.users.find_one({"_id": ObjectId(owner_id)})
+                owner = await db.doctors.find_one({"_id": ObjectId(owner_id)})
                 doc["doctor_name"] = owner.get("name") if owner else None
             except Exception:
                 doc["doctor_name"] = None
@@ -31,7 +31,7 @@ async def get_clinics(search: str = None) -> list:
 
 async def get_doctors_in_clinic(clinic_id: str) -> list:
     db = get_db()
-    cursor = db.users.find({"clinic_id": clinic_id, "role": "doctor", "is_active": True})
+    cursor = db.doctors.find({"clinic_id": clinic_id, "is_active": True})
     doctors = []
     async for u in cursor:
         doc = serialize_doc(u)
@@ -70,7 +70,7 @@ async def create_or_update_clinic(user_id: str, clinic_id: str, data: dict) -> d
     data["created_at"] = datetime.now(timezone.utc)
     result = await db.clinics.insert_one(data)
     new_clinic_id = str(result.inserted_id)
-    await db.users.update_one(
+    await db.doctors.update_one(
         {"_id": ObjectId(user_id)},
         {"$set": {"clinic_id": new_clinic_id, "updated_at": datetime.now(timezone.utc)}}
     )
@@ -81,7 +81,7 @@ async def create_or_update_clinic(user_id: str, clinic_id: str, data: dict) -> d
 async def get_doctor_status(clinic_id: str) -> list:
     db = get_db()
     threshold = datetime.now(timezone.utc) - timedelta(minutes=15)
-    cursor = db.users.find({"clinic_id": clinic_id, "role": "doctor"})
+    cursor = db.doctors.find({"clinic_id": clinic_id})
     result = []
     async for doc in cursor:
         last_active = doc.get("last_active_at")

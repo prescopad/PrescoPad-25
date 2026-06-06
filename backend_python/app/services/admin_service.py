@@ -4,7 +4,7 @@ from typing import Optional
 
 from bson import ObjectId
 
-from app.config.database import get_db
+from app.config.database import get_db, get_user_collection, find_user_by_id_across_collections
 from app.models.common import serialize_doc
 
 
@@ -15,9 +15,9 @@ async def get_overview() -> dict:
     week_start = now - timedelta(days=7)
     month_start = now - timedelta(days=30)
 
-    doctors = await db.users.count_documents({"role": "doctor", "is_active": True})
-    assistants = await db.users.count_documents({"role": "assistant", "is_active": True})
-    admins = await db.users.count_documents({"role": "admin", "is_active": True})
+    doctors = await db.doctors.count_documents({"is_active": True})
+    assistants = await db.assistants.count_documents({"is_active": True})
+    admins = await db.admins.count_documents({"is_active": True})
     total_clinics = await db.clinics.count_documents({})
     total_patients = await db.patients.count_documents({"is_deleted": {"$ne": True}})
 
@@ -50,8 +50,7 @@ async def get_overview() -> dict:
             rev_total_refund = row["total"]
 
     online_threshold = now - timedelta(minutes=15)
-    online_doctors = await db.users.count_documents({
-        "role": "doctor",
+    online_doctors = await db.doctors.count_documents({
         "is_active": True,
         "last_active_at": {"$gte": online_threshold},
     })
@@ -90,24 +89,53 @@ async def list_users(
 ) -> dict:
     db = get_db()
     q: dict = {}
-    if role and role in ("doctor", "assistant", "admin"):
-        q["role"] = role
     if search:
         import re
         q["$or"] = [
             {"phone": {"$regex": re.escape(search), "$options": "i"}},
             {"name": {"$regex": re.escape(search), "$options": "i"}},
         ]
-    total = await db.users.count_documents(q)
-    cursor = db.users.find(q).sort("created_at", -1).skip(offset).limit(limit)
-    users = []
-    async for u in cursor:
-        doc = serialize_doc(u)
-        doc.pop("password_hash", None)
-        doc.pop("otp_hash", None)
-        doc.pop("otp_attempts", None)
-        users.append(doc)
-    return {"total": total, "users": users}
+
+    if role and role in ("doctor", "assistant", "admin"):
+        col = get_user_collection(db, role)
+        total = await col.count_documents(q)
+        cursor = col.find(q).sort("created_at", -1).skip(offset).limit(limit)
+        users = []
+        async for u in cursor:
+            doc = serialize_doc(u)
+            doc.pop("password_hash", None)
+            doc.pop("otp_hash", None)
+            doc.pop("otp_attempts", None)
+            users.append(doc)
+        return {"total": total, "users": users}
+    else:
+        # Query all three collections and merge
+        doctors = [serialize_doc(u) async for u in db.doctors.find(q)]
+        assistants = [serialize_doc(u) async for u in db.assistants.find(q)]
+        admins = [serialize_doc(u) async for u in db.admins.find(q)]
+        
+        all_users = doctors + assistants + admins
+
+        def get_created_at(u):
+            val = u.get("created_at")
+            if isinstance(val, datetime):
+                return val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val
+            if isinstance(val, str):
+                try:
+                    return datetime.fromisoformat(val.replace("Z", "+00:00"))
+                except Exception:
+                    pass
+            return datetime.min
+
+        all_users.sort(key=get_created_at, reverse=True)
+        total = len(all_users)
+        paginated = all_users[offset : offset + limit]
+
+        for u in paginated:
+            u.pop("password_hash", None)
+            u.pop("otp_hash", None)
+            u.pop("otp_attempts", None)
+        return {"total": total, "users": paginated}
 
 
 async def list_clinics(search: Optional[str] = None, limit: int = 100, offset: int = 0) -> dict:
@@ -122,8 +150,8 @@ async def list_clinics(search: Optional[str] = None, limit: int = 100, offset: i
     async for c in cursor:
         doc = serialize_doc(c)
         cid = doc["id"]
-        doc["doctorCount"] = await db.users.count_documents({"clinic_id": cid, "role": "doctor", "is_active": True})
-        doc["assistantCount"] = await db.users.count_documents({"clinic_id": cid, "role": "assistant", "is_active": True})
+        doc["doctorCount"] = await db.doctors.count_documents({"clinic_id": cid, "is_active": True})
+        doc["assistantCount"] = await db.assistants.count_documents({"clinic_id": cid, "is_active": True})
         doc["prescriptionCount"] = await db.prescriptions.count_documents({"clinic_id": cid, "is_deleted": {"$ne": True}})
         items.append(doc)
     return {"total": total, "clinics": items}
@@ -231,13 +259,15 @@ async def list_patients(
 
 async def set_user_active(user_id: str, is_active: bool) -> dict:
     db = get_db()
-    await db.users.update_one(
+    user, role = await find_user_by_id_across_collections(db, user_id)
+    if not user:
+        raise ValueError("User not found")
+    col = get_user_collection(db, role)
+    await col.update_one(
         {"_id": ObjectId(user_id)},
         {"$set": {"is_active": is_active, "updated_at": datetime.now(timezone.utc)}},
     )
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
-    if not user:
-        raise ValueError("User not found")
+    user = await col.find_one({"_id": ObjectId(user_id)})
     doc = serialize_doc(user)
     doc.pop("password_hash", None)
     doc.pop("otp_hash", None)
@@ -246,13 +276,23 @@ async def set_user_active(user_id: str, is_active: bool) -> dict:
 
 async def promote_to_admin(user_id: str) -> dict:
     db = get_db()
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {"role": "admin", "updated_at": datetime.now(timezone.utc)}},
-    )
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    user, role = await find_user_by_id_across_collections(db, user_id)
     if not user:
         raise ValueError("User not found")
+    if role == "admin":
+        doc = serialize_doc(user)
+        doc.pop("password_hash", None)
+        doc.pop("otp_hash", None)
+        return doc
+
+    old_col = get_user_collection(db, role)
+    await old_col.delete_one({"_id": ObjectId(user_id)})
+
+    user["role"] = "admin"
+    user["updated_at"] = datetime.now(timezone.utc)
+    await db.admins.insert_one(user)
+
+    user = await db.admins.find_one({"_id": ObjectId(user_id)})
     doc = serialize_doc(user)
     doc.pop("password_hash", None)
     doc.pop("otp_hash", None)
@@ -261,9 +301,10 @@ async def promote_to_admin(user_id: str) -> dict:
 
 async def delete_user(user_id: str) -> None:
     db = get_db()
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    user, role = await find_user_by_id_across_collections(db, user_id)
     if not user:
         raise ValueError("User not found")
-    if user.get("role") == "admin":
+    if role == "admin":
         raise ValueError("Cannot delete admin users")
-    await db.users.delete_one({"_id": ObjectId(user_id)})
+    col = get_user_collection(db, role)
+    await col.delete_one({"_id": ObjectId(user_id)})

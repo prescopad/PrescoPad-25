@@ -53,10 +53,14 @@ def get_db() -> AsyncIOMotorDatabase:
 
 
 async def _create_indexes(db: AsyncIOMotorDatabase):
-    await db.users.create_index([("phone", 1), ("role", 1)], unique=True)
-    await db.users.create_index("doctor_code", sparse=True)
-    await db.users.create_index("clinic_id")
-    await db.users.create_index("role")
+    await db.doctors.create_index("phone", unique=True)
+    await db.doctors.create_index("doctor_code", sparse=True)
+    await db.doctors.create_index("clinic_id")
+
+    await db.assistants.create_index("phone", unique=True)
+    await db.assistants.create_index("clinic_id")
+
+    await db.admins.create_index("phone", unique=True)
 
     await db.clinics.create_index("owner_id")
 
@@ -130,7 +134,7 @@ async def _seed_admin(db: AsyncIOMotorDatabase):
 
     from app.utils.hash import hash_password
 
-    existing = await db.users.find_one({"phone": settings.ADMIN_PHONE, "role": "admin"})
+    existing = await db.admins.find_one({"phone": settings.ADMIN_PHONE})
     if existing:
         return
 
@@ -149,8 +153,34 @@ async def _seed_admin(db: AsyncIOMotorDatabase):
         "created_at": now,
         "updated_at": now,
     }
-    await db.users.insert_one(user_doc)
+    await db.admins.insert_one(user_doc)
     log.warning(
         "Admin seeded with phone=%s — change the password immediately.",
         settings.ADMIN_PHONE,
     )
+
+
+def get_user_collection(db, role: str):
+    if role == "doctor":
+        return db.doctors
+    elif role == "assistant":
+        return db.assistants
+    elif role == "admin":
+        return db.admins
+    raise ValueError(f"Invalid role: {role}")
+
+
+async def find_user_by_id_across_collections(db, user_id: str) -> tuple[dict | None, str | None]:
+    """Finds user by id across all collections. Returns (user_doc, role) or (None, None)."""
+    from bson import ObjectId
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        return None, None
+
+    for role, col in [("doctor", db.doctors), ("assistant", db.assistants), ("admin", db.admins)]:
+        user = await col.find_one({"_id": oid})
+        if user:
+            return user, role
+    return None, None
+

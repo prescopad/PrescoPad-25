@@ -3,7 +3,7 @@ from typing import Optional
 
 from bson import ObjectId
 
-from app.config.database import get_db
+from app.config.database import get_db, get_user_collection
 from app.config.settings import settings
 from app.utils.hash import (
     hash_password, verify_password,
@@ -17,7 +17,8 @@ from app.models.common import serialize_doc
 
 async def send_otp(phone: str, role: str) -> dict:
     db = get_db()
-    user = await db.users.find_one({"phone": phone, "role": role})
+    col = get_user_collection(db, role)
+    user = await col.find_one({"phone": phone})
 
     # Rate-limit OTP requests per phone+role.
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -58,7 +59,7 @@ async def send_otp(phone: str, role: str) -> dict:
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
         }
-        result = await db.users.insert_one(user_doc)
+        result = await col.insert_one(user_doc)
         user_id = str(result.inserted_id)
 
         if role == "doctor":
@@ -75,7 +76,7 @@ async def send_otp(phone: str, role: str) -> dict:
             }
             clinic_result = await db.clinics.insert_one(clinic_doc)
             clinic_id = str(clinic_result.inserted_id)
-            await db.users.update_one(
+            await col.update_one(
                 {"_id": result.inserted_id},
                 {"$set": {"clinic_id": clinic_id}}
             )
@@ -102,7 +103,7 @@ async def send_otp(phone: str, role: str) -> dict:
             new_count = 1
             new_window = datetime.now(timezone.utc)
 
-        await db.users.update_one(
+        await col.update_one(
             {"_id": user["_id"]},
             {"$set": {
                 "otp_hash": otp_hash,
@@ -119,7 +120,8 @@ async def send_otp(phone: str, role: str) -> dict:
 
 async def verify_otp_and_login(phone: str, otp: str, role: str) -> dict:
     db = get_db()
-    user = await db.users.find_one({"phone": phone, "role": role})
+    col = get_user_collection(db, role)
+    user = await col.find_one({"phone": phone})
     if not user:
         raise ValueError("Invalid OTP")  # don't leak account existence
 
@@ -130,7 +132,7 @@ async def verify_otp_and_login(phone: str, otp: str, role: str) -> dict:
     attempts = user.get("otp_attempts", 0) or 0
     if attempts >= settings.OTP_MAX_VERIFY_ATTEMPTS:
         # Invalidate the OTP so it can't be guessed further.
-        await db.users.update_one(
+        await col.update_one(
             {"_id": user["_id"]},
             {"$set": {"otp_hash": None, "otp_expires_at": None}}
         )
@@ -144,13 +146,13 @@ async def verify_otp_and_login(phone: str, otp: str, role: str) -> dict:
             raise ValueError("OTP expired")
 
     if not verify_otp(otp, user["otp_hash"]):
-        await db.users.update_one(
+        await col.update_one(
             {"_id": user["_id"]},
             {"$inc": {"otp_attempts": 1}}
         )
         raise ValueError("Invalid OTP")
 
-    await db.users.update_one(
+    await col.update_one(
         {"_id": user["_id"]},
         {"$set": {
             "otp_hash": None,
@@ -161,13 +163,14 @@ async def verify_otp_and_login(phone: str, otp: str, role: str) -> dict:
         }}
     )
 
-    user = await db.users.find_one({"_id": user["_id"]})
+    user = await col.find_one({"_id": user["_id"]})
     return await _build_auth_response(user)
 
 
 async def login_with_password(phone: str, password: str, role: str) -> dict:
     db = get_db()
-    user = await db.users.find_one({"phone": phone, "role": role})
+    col = get_user_collection(db, role)
+    user = await col.find_one({"phone": phone})
     if not user:
         raise ValueError("Invalid credentials")
 
@@ -178,11 +181,11 @@ async def login_with_password(phone: str, password: str, role: str) -> dict:
     if not verify_password(password, user["password_hash"]):
         raise ValueError("Invalid credentials")
 
-    await db.users.update_one(
+    await col.update_one(
         {"_id": user["_id"]},
         {"$set": {"last_active_at": datetime.now(timezone.utc)}}
     )
-    user = await db.users.find_one({"_id": user["_id"]})
+    user = await col.find_one({"_id": user["_id"]})
     return await _build_auth_response(user)
 
 
@@ -192,21 +195,26 @@ async def refresh_token(refresh_token_str: str) -> dict:
         raise ValueError("Invalid refresh token")
 
     db = get_db()
-    user = await db.users.find_one({"_id": ObjectId(payload["userId"])})
+    role = payload.get("role")
+    if not role:
+        raise ValueError("Invalid token payload")
+    col = get_user_collection(db, role)
+    user = await col.find_one({"_id": ObjectId(payload["userId"])})
     if not user or not user.get("is_active"):
         raise ValueError("User not found or inactive")
 
     return await _build_auth_response(user)
 
 
-async def complete_registration(user_id: str, data: dict) -> dict:
+async def complete_registration(user_id: str, role: str, data: dict) -> dict:
     db = get_db()
+    col = get_user_collection(db, role)
     update = {
         "name": data.get("name"),
         "is_profile_complete": True,
         "updated_at": datetime.now(timezone.utc),
     }
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    user = await col.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise ValueError("User not found")
 
@@ -220,8 +228,8 @@ async def complete_registration(user_id: str, data: dict) -> dict:
         if data.get("password"):
             update["password_hash"] = hash_password(data["password"])
 
-    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update})
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    await col.update_one({"_id": ObjectId(user_id)}, {"$set": update})
+    user = await col.find_one({"_id": ObjectId(user_id)})
     return serialize_doc(user)
 
 
@@ -240,9 +248,10 @@ async def _with_solo_mode(user_data: dict, clinic_id) -> dict:
     return user_data
 
 
-async def get_me(user_id: str) -> dict:
+async def get_me(user_id: str, role: str) -> dict:
     db = get_db()
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    col = get_user_collection(db, role)
+    user = await col.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise ValueError("User not found")
     data = serialize_doc(user)
@@ -251,26 +260,29 @@ async def get_me(user_id: str) -> dict:
     return await _with_solo_mode(data, user.get("clinic_id"))
 
 
-async def update_profile(user_id: str, data: dict) -> dict:
+async def update_profile(user_id: str, role: str, data: dict) -> dict:
     db = get_db()
+    col = get_user_collection(db, role)
     update = {k: v for k, v in data.items() if v is not None}
     update["updated_at"] = datetime.now(timezone.utc)
-    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update})
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    await col.update_one({"_id": ObjectId(user_id)}, {"$set": update})
+    user = await col.find_one({"_id": ObjectId(user_id)})
     return serialize_doc(user)
 
 
-async def heartbeat(user_id: str):
+async def heartbeat(user_id: str, role: str):
     db = get_db()
-    await db.users.update_one(
+    col = get_user_collection(db, role)
+    await col.update_one(
         {"_id": ObjectId(user_id)},
         {"$set": {"last_active_at": datetime.now(timezone.utc)}}
     )
 
 
-async def refresh_session(user_id: str) -> dict:
+async def refresh_session(user_id: str, role: str) -> dict:
     db = get_db()
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    col = get_user_collection(db, role)
+    user = await col.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise ValueError("User not found")
     return await _build_auth_response(user)
@@ -302,6 +314,6 @@ async def _build_auth_response(user: dict) -> dict:
 async def _unique_doctor_code(db) -> str:
     while True:
         code = generate_doctor_code()
-        existing = await db.users.find_one({"doctor_code": code})
+        existing = await db.doctors.find_one({"doctor_code": code})
         if not existing:
             return code
