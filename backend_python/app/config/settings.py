@@ -14,10 +14,12 @@ class Settings(BaseSettings):
     JWT_REFRESH_SECRET: str
     JWT_REFRESH_EXPIRES_IN: int = 30
 
-    # OTP — set to True only for local dev when you don't have a Fast2SMS key.
+    # OTP — set to True only for local dev when you don't have Twilio configured.
     OTP_DEMO_MODE: bool = False
     OTP_DEMO_CODE: str = "123456"
-    FAST2SMS_API_KEY: Optional[str] = None
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_FROM_NUMBER: Optional[str] = None
 
     # OTP brute-force protection
     OTP_MAX_VERIFY_ATTEMPTS: int = 5
