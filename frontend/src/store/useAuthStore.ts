@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
+import SecureStore from '../utils/secureStore';
 import { User, UserRole, AuthState } from '../types/auth.types';
 
 interface AuthStore extends AuthState {

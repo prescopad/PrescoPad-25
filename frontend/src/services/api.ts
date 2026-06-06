@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import SecureStore from '../utils/secureStore';
 import { APP_CONFIG } from '../constants/config';
 
 export const BASE_URL = APP_CONFIG.api.baseUrl;

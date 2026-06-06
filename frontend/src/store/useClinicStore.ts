@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
+import SecureStore from '../utils/secureStore';
 import { Clinic, DoctorProfile } from '../types/clinic.types';
 import api from '../services/api';
 import { useAuthStore } from './useAuthStore';
