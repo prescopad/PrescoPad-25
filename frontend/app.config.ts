@@ -10,6 +10,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     ...(config.plugins ?? []),
+    'expo-localization',
     '@react-native-community/datetimepicker',
     [
       'expo-image-picker',
