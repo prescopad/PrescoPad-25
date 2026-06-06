@@ -4,7 +4,7 @@
     "slug": "PrescoPad",
     "version": "2.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/prescopad.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -16,17 +16,20 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.prescopad.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "PrescoPad needs microphone access to record consultations for transcription."
+        "NSMicrophoneUsageDescription": "PrescoPad needs microphone access to record consultations for transcription.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/prescopad.png",
         "backgroundColor": "#0077B6"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.prescopad.app",
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-sqlite",
@@ -35,7 +38,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "cf59fdd9-7225-45f4-9bdc-7f9b4493b51b"
+        "projectId": "1fd4aa61-d13c-4d10-b7b8-61334d53bc7c"
       }
     }
   }

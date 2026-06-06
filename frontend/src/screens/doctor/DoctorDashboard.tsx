@@ -32,7 +32,7 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
   const clinic = useClinicStore((s) => s.clinic);
   const doctorProfile = useClinicStore((s) => s.doctorProfile);
   const { loadClinic, loadDoctorProfile } = useClinicStore();
-  const { queueItems, stats, isLoading, loadQueueFiltered, loadStatsFiltered, startConsult, startPolling, stopPolling } = useQueueStore();
+  const { queueItems, stats, isLoading, loadQueueFiltered, loadStatsFiltered, startConsult, startPolling, stopPolling, removeFromQueue } = useQueueStore();
   const { balance, loadBalance } = useWalletStore();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -101,6 +101,27 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
       const msg = error instanceof Error ? error.message : 'Failed to start consultation';
       Alert.alert(t('common.error'), msg);
     }
+  };
+
+  const handleRemoveQueueItem = (item: QueueItem) => {
+    Alert.alert(
+      'Remove Patient',
+      'Are you sure you want to remove this patient from the queue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeFromQueue(item.id);
+            } catch (error: unknown) {
+              Alert.alert('Error', 'Failed to remove patient from queue');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const doctorName = doctorProfile?.name || user?.name || 'Doctor';
@@ -180,7 +201,15 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
               {getStatusLabel(item.status)}
             </Text>
           </View>
-          {isTappable && (
+          {item.status === QueueStatus.WAITING && (
+            <TouchableOpacity 
+              onPress={() => handleRemoveQueueItem(item)}
+              style={{ padding: 6, marginLeft: 6 }}
+            >
+              <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+            </TouchableOpacity>
+          )}
+          {isTappable && item.status !== QueueStatus.WAITING && (
             <Ionicons
               name="chevron-forward"
               size={18}

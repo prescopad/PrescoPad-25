@@ -9,6 +9,7 @@ import {
   RefreshControl,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -115,6 +116,28 @@ export default function AssistantDashboard(): React.JSX.Element {
     [user, clearSearch],
   );
 
+  const handleRemoveQueueItem = useCallback((item: QueueItem) => {
+    Alert.alert(
+      'Remove Patient',
+      'Are you sure you want to remove this patient from the queue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { removeFromQueue } = useQueueStore.getState();
+              await removeFromQueue(item.id);
+            } catch (error: unknown) {
+              Alert.alert('Error', 'Failed to remove patient from queue');
+            }
+          }
+        }
+      ]
+    );
+  }, []);
+
   const activeQueue = queueItems.filter(
     (item) =>
       item.status === QueueStatus.WAITING ||
@@ -168,6 +191,14 @@ export default function AssistantDashboard(): React.JSX.Element {
             {statusLabel}
           </Text>
         </View>
+        {item.status === QueueStatus.WAITING && (
+          <TouchableOpacity 
+            onPress={() => handleRemoveQueueItem(item)}
+            style={{ padding: 6, marginLeft: 6 }}
+          >
+            <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
     );
   };

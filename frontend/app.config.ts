@@ -25,8 +25,5 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // auto-detect the local backend from the Expo dev-server host, so the app
     // talks to your machine's localhost:3000 instead of Render.
     backendUrl: process.env.BACKEND_URL || undefined,
-    eas: {
-      projectId: 'cf59fdd9-7225-45f4-9bdc-7f9b4493b51b',
-    },
   },
 });

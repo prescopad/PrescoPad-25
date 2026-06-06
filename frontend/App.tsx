@@ -12,23 +12,29 @@ import { initI18n } from './src/i18n';
 export default function App(): React.JSX.Element {
   const [dbReady, setDbReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
-      // Initialize i18n (loads persisted / device language) and the database.
-      await Promise.all([
-        initI18n().catch(() => { /* fall back to English */ }),
-        getDatabase(),
-      ]);
-      setDbReady(true);
-
-      // Show splash for 2 seconds
-      setTimeout(() => setShowSplash(false), 2000);
+      try {
+        // Initialize i18n (loads persisted / device language) and the database.
+        await Promise.all([
+          initI18n().catch((e) => { console.warn('i18n init error', e); }),
+          getDatabase(),
+        ]);
+        setDbReady(true);
+      } catch (error) {
+        console.error('App initialization error:', error);
+        setInitError(error instanceof Error ? error.message : 'Unknown initialization error');
+      } finally {
+        // Show splash for 2 seconds
+        setTimeout(() => setShowSplash(false), 2000);
+      }
     }
     init();
   }, []);
 
-  if (showSplash || !dbReady) {
+  if (showSplash || (!dbReady && !initError)) {
     return (
       <View style={styles.splash}>
         <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
@@ -39,6 +45,18 @@ export default function App(): React.JSX.Element {
         />
         <Text style={styles.splashTitle}>{APP_CONFIG.name}</Text>
         <Text style={styles.splashTagline}>{APP_CONFIG.tagline}</Text>
+      </View>
+    );
+  }
+
+  if (initError) {
+    return (
+      <View style={styles.splash}>
+        <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
+        <Text style={styles.splashTitle}>Startup Error</Text>
+        <Text style={[styles.splashTagline, { color: COLORS.white, textAlign: 'center', paddingHorizontal: 32, marginTop: 16 }]}>
+          {initError}
+        </Text>
       </View>
     );
   }
