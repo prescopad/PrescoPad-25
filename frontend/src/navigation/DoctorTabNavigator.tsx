@@ -22,6 +22,7 @@ import AnalyticsScreen from '../screens/doctor/AnalyticsScreen';
 import AddPatientScreen from '../screens/assistant/AddPatientScreen';
 import PatientSearchScreen from '../screens/assistant/PatientSearchScreen';
 import PatientDetailScreen from '../screens/assistant/PatientDetailScreen';
+import DoctorAddPatientHubScreen from '../screens/doctor/DoctorAddPatientHubScreen';
 
 // Shared screens
 import WalletScreen from '../screens/shared/WalletScreen';
@@ -58,6 +59,7 @@ function DoctorQueueStack(): React.JSX.Element {
 function DoctorPatientStack(): React.JSX.Element {
   return (
     <PatientStack.Navigator screenOptions={{ headerShown: false }}>
+      <PatientStack.Screen name="PatientHub" component={DoctorAddPatientHubScreen} />
       <PatientStack.Screen name="AddPatientForm" component={AddPatientScreen} />
       <PatientStack.Screen name="PatientSearch" component={PatientSearchScreen} />
       <PatientStack.Screen name="PatientDetail" component={PatientDetailScreen} />

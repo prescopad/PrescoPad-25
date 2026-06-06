@@ -31,6 +31,7 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
   const user = useAuthStore((s) => s.user);
   const clinic = useClinicStore((s) => s.clinic);
   const doctorProfile = useClinicStore((s) => s.doctorProfile);
+  const { loadClinic, loadDoctorProfile } = useClinicStore();
   const { queueItems, stats, isLoading, loadQueueFiltered, loadStatsFiltered, startConsult, startPolling, stopPolling } = useQueueStore();
   const { balance, loadBalance } = useWalletStore();
 
@@ -45,8 +46,10 @@ export default function DoctorDashboard({ navigation }: DoctorDashboardProps): R
       loadQueueFiltered({ status, todayOnly }),
       loadStatsFiltered(todayOnly),
       loadBalance(),
+      loadClinic(),
+      loadDoctorProfile(),
     ]);
-  }, [loadQueueFiltered, loadStatsFiltered, loadBalance, showAllHistory, activeTab]);
+  }, [loadQueueFiltered, loadStatsFiltered, loadBalance, loadClinic, loadDoctorProfile, showAllHistory, activeTab]);
 
   // Start queue polling on focus, stop on blur
   useFocusEffect(

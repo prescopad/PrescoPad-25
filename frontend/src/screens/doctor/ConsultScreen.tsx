@@ -26,6 +26,13 @@ type LabTestDraft = Omit<PrescriptionLabTest, 'id' | 'prescriptionId'>;
 
 type ConsultScreenProps = NativeStackScreenProps<DoctorStackParamList, 'Consult'>;
 
+const COMMON_DISEASES = [
+  'Fever', 'Cold & Cough', 'Viral Infection', 'Typhoid', 'Malaria', 'Dengue',
+  'Diabetes', 'Hypertension', 'Gastritis / Acidity', 'UTI', 'Respiratory Infection',
+  'Diarrhea / Gastroenteritis', 'Skin Allergy', 'Anemia', 'Back Pain',
+  'Migraine', 'Asthma', 'Arthritis', 'Hypothyroidism', 'Anxiety / Stress',
+] as const;
+
 export default function ConsultScreen({ navigation, route }: ConsultScreenProps): React.JSX.Element {
   const { t } = useTranslation();
   const { queueItem, patient } = route.params;
@@ -43,23 +50,6 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
 
   const [isCreating, setIsCreating] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [newSymptom, setNewSymptom] = useState('');
-
-  const handleAddSymptom = () => {
-    const trimmed = newSymptom.trim();
-    if (trimmed) {
-      const currentSyms = currentDraft.symptoms || [];
-      if (!currentSyms.includes(trimmed)) {
-        updateDraft({ symptoms: [...currentSyms, trimmed] });
-      }
-      setNewSymptom('');
-    }
-  };
-
-  const handleRemoveSymptom = (index: number) => {
-    const currentSyms = currentDraft.symptoms || [];
-    updateDraft({ symptoms: currentSyms.filter((_, i) => i !== index) });
-  };
 
   // Reset draft when doctor leaves Consult via back button (not forward to Preview)
   useEffect(() => {
@@ -239,66 +229,40 @@ export default function ConsultScreen({ navigation, route }: ConsultScreenProps)
           </View>
         </View>
 
-        {/* Symptoms */}
-        <View style={styles.section}>
-          <View style={styles.sectionLabelRow}>
-            <Text style={styles.sectionTitle}>{t('consult.symptoms', 'Symptoms')}</Text>
-          </View>
-
-          {/* Tag Chips Wrapper */}
-          <View style={styles.symptomsContainer}>
-            {(!currentDraft.symptoms || currentDraft.symptoms.length === 0) ? (
-              <Text style={[styles.emptyText, { paddingVertical: SPACING.xs }]}>
-                No symptoms recorded. Type below to add manually.
-              </Text>
-            ) : (
-              <View style={styles.tagsWrapper}>
-                {currentDraft.symptoms.map((sym, idx) => (
-                  <View key={`sym-${idx}`} style={styles.tagChip}>
-                    <Text style={styles.tagText}>{sym}</Text>
-                    <TouchableOpacity
-                      style={styles.tagCloseBtn}
-                      onPress={() => handleRemoveSymptom(idx)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="close-circle" size={16} color={COLORS.primary} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-            
-            {/* Tag Input Row */}
-            <View style={styles.tagInputRow}>
-              <TextInput
-                style={styles.tagInput}
-                placeholder="Add symptom (e.g. Fever, Cough)..."
-                placeholderTextColor={COLORS.textLight}
-                value={newSymptom}
-                onChangeText={setNewSymptom}
-                onSubmitEditing={handleAddSymptom}
-                blurOnSubmit={false}
-              />
-              <TouchableOpacity
-                style={styles.tagAddBtn}
-                onPress={handleAddSymptom}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={16} color={COLORS.white} />
-                <Text style={styles.tagAddBtnText}>{t('common.add')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
         {/* Diagnosis */}
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>{t('consult.diagnosis')} *</Text>
           </View>
+
+          {/* Common Disease Quick-Select Chips */}
+          <Text style={styles.commonDiseasesLabel}>Quick Select</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.commonDiseasesRow}
+            keyboardShouldPersistTaps="handled"
+          >
+            {COMMON_DISEASES.map((disease) => {
+              const isSelected = currentDraft.diagnosis === disease;
+              return (
+                <TouchableOpacity
+                  key={disease}
+                  style={[styles.diseaseChip, isSelected && styles.diseaseChipSelected]}
+                  onPress={() => handleDiagnosisChange(isSelected ? '' : disease)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.diseaseChipText, isSelected && styles.diseaseChipTextSelected]}>
+                    {disease}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
           <TextInput
             style={styles.diagnosisInput}
-            placeholder="Enter diagnosis..."
+            placeholder="Type custom diagnosis or select above..."
             placeholderTextColor={COLORS.textLight}
             value={currentDraft.diagnosis}
             onChangeText={handleDiagnosisChange}
@@ -723,69 +687,39 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
 
-  // Symptoms & Tags Component
-  symptomsContainer: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: SPACING.md,
-  },
-  tagsWrapper: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  // Common Disease Chips
+  commonDiseasesLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
     marginBottom: SPACING.sm,
   },
-  tagChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primaryLight,
-    paddingLeft: SPACING.md,
-    paddingRight: 6,
-    paddingVertical: 4,
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.primaryLight,
-    gap: 4,
+  commonDiseasesRow: {
+    gap: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    paddingBottom: SPACING.md,
   },
-  tagText: {
-    color: COLORS.primary,
+  diseaseChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.full,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+  diseaseChipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  diseaseChipText: {
     fontSize: 13,
     fontWeight: '600',
+    color: COLORS.textSecondary,
   },
-  tagCloseBtn: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tagInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginTop: 4,
-  },
-  tagInput: {
-    flex: 1,
-    backgroundColor: COLORS.surfaceSecondary,
-    borderRadius: RADIUS.sm,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 6,
-    fontSize: 13,
-    color: COLORS.text,
-  },
-  tagAddBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 8,
-    borderRadius: RADIUS.sm,
-    gap: 4,
-  },
-  tagAddBtnText: {
+  diseaseChipTextSelected: {
     color: COLORS.white,
-    fontSize: 12,
-    fontWeight: '700',
   },
 
 });
