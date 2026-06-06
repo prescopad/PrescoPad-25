@@ -40,7 +40,7 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
   } = useClinicStore();
 
   const { user } = useAuthStore();
-  const isDoctor = user?.role === 'doctor';
+  const canEdit = user?.role === 'doctor' || user?.role === 'admin';
   const { t } = useTranslation();
 
   const [clinicName, setClinicName] = useState('');
@@ -61,7 +61,7 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
   }, [user?.signatureUrl]);
 
   const handlePickSignature = async () => {
-    if (!isDoctor) return;
+    if (!canEdit) return;
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
@@ -97,7 +97,7 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
   };
 
   const handleRemoveSignature = async () => {
-    if (!isDoctor) return;
+    if (!canEdit) return;
     Alert.alert(t('signature.removeTitle'), t('signature.removeConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
       {
@@ -200,11 +200,11 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
           keyboardShouldPersistTaps="handled"
         >
           {/* Restriction Banner for Assistants */}
-          {!isDoctor && (
+          {!canEdit && (
             <View style={styles.restrictionBanner}>
               <Ionicons name="information-circle" size={20} color={COLORS.info} />
               <Text style={styles.restrictionText}>
-                Only doctors can edit clinic details. Contact your doctor to make changes.
+                Only doctors and admins can edit clinic details. Contact your doctor to make changes.
               </Text>
             </View>
           )}
@@ -219,19 +219,19 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Clinic Name *</Text>
               <TextInput
-                style={[styles.input, !isDoctor && styles.inputDisabled]}
+                style={[styles.input, !canEdit && styles.inputDisabled]}
                 value={clinicName}
                 onChangeText={setClinicName}
                 placeholder="Enter clinic name"
                 placeholderTextColor={COLORS.textLight}
-                editable={isDoctor}
+                editable={canEdit}
               />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Address</Text>
               <TextInput
-                style={[styles.input, styles.multilineInput, !isDoctor && styles.inputDisabled]}
+                style={[styles.input, styles.multilineInput, !canEdit && styles.inputDisabled]}
                 value={address}
                 onChangeText={setAddress}
                 placeholder="Enter clinic address"
@@ -239,34 +239,34 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
-                editable={isDoctor}
+                editable={canEdit}
               />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Phone</Text>
               <TextInput
-                style={[styles.input, !isDoctor && styles.inputDisabled]}
+                style={[styles.input, !canEdit && styles.inputDisabled]}
                 value={phone}
                 onChangeText={setPhone}
                 placeholder="Enter phone number"
                 placeholderTextColor={COLORS.textLight}
                 keyboardType="phone-pad"
-                editable={isDoctor}
+                editable={canEdit}
               />
             </View>
 
             <View style={styles.inputGroupLast}>
               <Text style={styles.label}>Email</Text>
               <TextInput
-                style={[styles.input, !isDoctor && styles.inputDisabled]}
+                style={[styles.input, !canEdit && styles.inputDisabled]}
                 value={email}
                 onChangeText={setEmail}
                 placeholder="Enter email address"
                 placeholderTextColor={COLORS.textLight}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                editable={isDoctor}
+                editable={canEdit}
               />
             </View>
           </View>
@@ -281,42 +281,42 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Doctor Name *</Text>
               <TextInput
-                style={[styles.input, !isDoctor && styles.inputDisabled]}
+                style={[styles.input, !canEdit && styles.inputDisabled]}
                 value={doctorName}
                 onChangeText={setDoctorName}
                 placeholder="Enter doctor name"
                 placeholderTextColor={COLORS.textLight}
-                editable={isDoctor}
+                editable={canEdit}
               />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Specialty</Text>
               <TextInput
-                style={[styles.input, !isDoctor && styles.inputDisabled]}
+                style={[styles.input, !canEdit && styles.inputDisabled]}
                 value={specialty}
                 onChangeText={setSpecialty}
                 placeholder="e.g., General Physician, Cardiologist"
                 placeholderTextColor={COLORS.textLight}
-                editable={isDoctor}
+                editable={canEdit}
               />
             </View>
 
             <View style={styles.inputGroupLast}>
               <Text style={styles.label}>Registration Number</Text>
               <TextInput
-                style={[styles.input, !isDoctor && styles.inputDisabled]}
+                style={[styles.input, !canEdit && styles.inputDisabled]}
                 value={regNumber}
                 onChangeText={setRegNumber}
                 placeholder="Medical registration number"
                 placeholderTextColor={COLORS.textLight}
-                editable={isDoctor}
+                editable={canEdit}
               />
             </View>
           </View>
 
-          {/* Digital Signature (doctor only) */}
-          {isDoctor && (
+          {/* Digital Signature (doctor/admin only) */}
+          {canEdit && (
             <>
               <View style={styles.sectionHeader}>
                 <Ionicons name="create-outline" size={20} color={COLORS.primary} />
@@ -368,8 +368,8 @@ export default function ClinicProfileScreen({ navigation }: ClinicProfileScreenP
           )}
         </ScrollView>
 
-        {/* Save Button - Only for doctors */}
-        {isDoctor && (
+        {/* Save Button - Only for doctors/admins */}
+        {canEdit && (
           <View style={styles.bottomBar}>
             <TouchableOpacity
               style={[styles.saveButton, isSaving && styles.buttonDisabled]}

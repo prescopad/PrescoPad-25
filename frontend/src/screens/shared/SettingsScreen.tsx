@@ -8,6 +8,7 @@ import {
   Alert,
   ScrollView,
   Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -56,6 +57,13 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps): Rea
     : '??';
 
   const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(t('settings.logoutConfirm'))) {
+        logout();
+      }
+      return;
+    }
+
     Alert.alert(
       t('settings.logout'),
       t('settings.logoutConfirm'),
