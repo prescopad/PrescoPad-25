@@ -30,10 +30,10 @@ async def send_otp_sms(phone: str) -> str:
             body=f"Your PrescoPad OTP is {otp}. Valid for 5 minutes. Do not share with anyone.",
         )
     except TwilioRestException as e:
-        log.warning("Twilio error: %s", e)
-        raise ValueError("Could not send OTP, please try again") from e
+        log.warning("Twilio error code=%s msg=%s", e.code, e.msg)
+        raise ValueError(f"Twilio error {e.code}: {e.msg}") from e
     except Exception as e:
         log.warning("SMS send failed: %s", e)
-        raise ValueError("Could not send OTP, please try again") from e
+        raise ValueError(f"SMS send failed: {e}") from e
 
     return otp
