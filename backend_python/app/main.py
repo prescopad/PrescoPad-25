@@ -50,16 +50,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — never combine wildcard origin with credentials. In production, fail
-# fast if origins weren't configured.
+# CORS — never combine wildcard origin with credentials. If no specific allowed
+# origins are configured, default to allowing all origins without credentials.
 _origins = settings.allowed_origins_list
 _allow_credentials = True
-if _origins == ["*"]:
-    if settings.NODE_ENV == "production":
-        log.error("ALLOWED_ORIGINS missing in production; refusing wildcard")
-        _origins = []
-    else:
-        _allow_credentials = False  # browsers reject *+credentials anyway
+if not _origins or _origins == ["*"]:
+    _origins = ["*"]
+    _allow_credentials = False
 
 app.add_middleware(
     CORSMiddleware,
